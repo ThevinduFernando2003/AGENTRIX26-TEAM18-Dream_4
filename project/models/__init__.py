@@ -22,12 +22,12 @@ from .medicine import (
     MedicinePriceItem,
     PharmacyQuote,
     MedicineQuoteResult,
+    OcrConfirmation,
 )
 from .panel import (
     SpecialistOpinion,
     ConsensusReport,
     PanelResult,
-    OcrConfirmation,
 )
 from .common import INTENT, SPECIALIST
 
@@ -49,9 +49,9 @@ __all__ = [
     "MedicinePriceItem",
     "PharmacyQuote",
     "MedicineQuoteResult",
+    "OcrConfirmation",
     # Panel
     "SpecialistOpinion",
     "ConsensusReport",
     "PanelResult",
-    "OcrConfirmation",
 ]
