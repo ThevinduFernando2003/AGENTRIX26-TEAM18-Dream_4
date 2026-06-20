@@ -37,7 +37,7 @@ from project.ui.panels import (  # noqa: E402
     report,
     sidebar,
 )
-from project.i18n.translate import t  # noqa: E402
+
 
 st.set_page_config(page_title="MedBridge AI", page_icon="🩺", layout="wide")
 
@@ -56,6 +56,8 @@ if not st.session_state.get("_rag_inited"):
 
 
 def main() -> None:
+    common.render_branding_styles()
+
     user = render_auth_gate()
     if not user:
         return
@@ -63,8 +65,7 @@ def main() -> None:
     sidebar.render(user)
 
     lang = common.lang_of(user)
-    st.title(t("app.title", lang))
-    st.caption(t("app.caption", lang))
+    common.render_top_banner(lang)
 
     # Active in-progress panels render above chat so they're not buried.
     emergency.render(user)

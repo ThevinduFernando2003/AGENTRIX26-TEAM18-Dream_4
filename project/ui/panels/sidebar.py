@@ -1,29 +1,50 @@
-"""Sidebar panel: user info, mock-data banner, ntfy topic, location, reminders, logout."""
+"""Sidebar panel: user info, mock-data banner, ntfy topic, location, language,
+reminders, logout and rights notice."""
 
 from __future__ import annotations
 
 import streamlit as st
 
-from ..auth import logout
-from ..common import get_geo
+from ..auth import invalidate_user_cache, logout, update_preferred_language
+from ..common import get_geo, language_short_label, render_sidebar_rights_banner
 from ...agents import reminders
 from ...i18n.translate import t
 from ...notifications.ntfy_client import topic_for_user
+
+_LANG_OPTIONS = ["en", "si", "ta"]
 
 
 def render(user: dict) -> None:
     lang = user.get("preferred_language", "en") or "en"
     with st.sidebar:
+        # ---- user header ----
         st.markdown(f"### 👤 {user.get('full_name') or user['username']}")
-        st.caption(f"{t('sidebar.language_label', lang)}: {lang}")
+
+        # ---- language switcher ----
+        st.markdown(f"**{t('sidebar.language', lang)}**")
+        selected_lang = st.radio(
+            t("sidebar.language", lang),
+            _LANG_OPTIONS,
+            index=_LANG_OPTIONS.index(lang) if lang in _LANG_OPTIONS else 0,
+            format_func=language_short_label,
+            horizontal=True,
+            key="lang_switcher",
+            label_visibility="collapsed",
+        )
+        if selected_lang != lang:
+            update_preferred_language(user["user_id"], selected_lang)
+            invalidate_user_cache()
+            st.rerun()
 
         st.warning(t("sidebar.mock_banner", lang))
 
+        # ---- ntfy topic ----
         topic = topic_for_user(user["user_id"])
         st.markdown(f"**{t('sidebar.topic_label', lang)}**")
         st.code(topic, language="text")
         st.caption(t("sidebar.topic_caption", lang, topic=topic))
 
+        # ---- location ----
         st.divider()
         st.markdown(f"**{t('sidebar.location', lang)}**")
         try:
@@ -47,14 +68,14 @@ def render(user: dict) -> None:
                 st.session_state["manual_geo"] = {"lat": m_lat, "lng": m_lng}
                 st.rerun()
 
+        # ---- TTS toggle ----
         st.divider()
-        # Tier-3: TTS toggle.
         st.session_state["tts_on"] = st.toggle(
             t("sidebar.tts_toggle", lang),
             value=st.session_state.get("tts_on", False),
         )
 
-        # Tier-3: reminder check button.
+        # ---- reminders ----
         if st.button(t("sidebar.reminders_btn", lang), use_container_width=True):
             due = reminders.due_within(user["user_id"], days=7)
             if not due:
@@ -72,7 +93,10 @@ def render(user: dict) -> None:
                 st.session_state.pop("pending_reminders", None)
                 st.session_state.pop("pending_reminders_count", None)
 
+        # ---- logout + rights ----
         st.divider()
-        if st.button(t("sidebar.logout", lang)):
+        if st.button(t("sidebar.logout", lang), use_container_width=True):
             logout()
             st.rerun()
+
+        render_sidebar_rights_banner(lang)
