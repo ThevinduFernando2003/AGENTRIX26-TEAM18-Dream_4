@@ -46,6 +46,14 @@ if not st.session_state.get("_db_inited"):
     init_db(seed=True)
     st.session_state["_db_inited"] = True
 
+# Lazy RAG index build on first run — idempotent, local embeddings, no key needed.
+# Ensures RAG grounding works on a fresh clone without a manual ingest step.
+if not st.session_state.get("_rag_inited"):
+    from project.rag.ingest import ensure_ingested  # noqa: E402
+
+    ensure_ingested()
+    st.session_state["_rag_inited"] = True
+
 
 def main() -> None:
     common.render_branding_styles()

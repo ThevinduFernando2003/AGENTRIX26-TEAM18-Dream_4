@@ -13,7 +13,7 @@ import streamlit as st
 from ..common import disclaimer, lang_of
 from ...agents import moderator, specialist_panel
 from ...db.db import get_conn
-from ...i18n.translate import t
+from ...i18n.translate import t, translate_dynamic
 from ...notifications.ntfy_client import send as ntfy_send, topic_for_user
 
 _SAMPLE_REPORTS_DIR = Path(__file__).resolve().parents[2] / "kb" / "sample_reports"
@@ -34,37 +34,33 @@ def render(user: dict) -> None:
 
     expanded = st.session_state.pop("open_report_panel", False)
     lang = lang_of(user)
+    none_label = t("panel.report.none", lang)
     with st.expander(t("panel.report.title", lang), expanded=expanded):
-        st.caption(
-            "Three independent specialists (cardiology, internal medicine, "
-            "radiology) each read the SAME report without seeing each other's "
-            "output. A moderator then surfaces points of agreement and "
-            "disagreement. Reports are text-only in this build."
-        )
+        st.caption(t("panel.report.caption", lang))
 
         samples = _list_sample_reports()
         sample_choice = st.selectbox(
-            "Pick a sample report (or use upload / paste below)",
-            ["— none —"] + [p.name for p in samples],
+            t("panel.report.pick_sample", lang),
+            [none_label] + [p.name for p in samples],
             key="rr_sample",
         )
 
         uploaded = st.file_uploader(
-            "Or upload a .txt report", type=["txt"], key="rr_upload"
+            t("panel.report.upload", lang), type=["txt"], key="rr_upload"
         )
 
         pasted = st.text_area(
-            "Or paste report text directly",
+            t("panel.report.paste", lang),
             value="",
             height=140,
             key="rr_paste",
-            placeholder="Paste the full report text here…",
+            placeholder=t("panel.report.paste_ph", lang),
         )
 
         if st.button(t("panel.report.run", lang), type="primary", key="rr_run"):
             text = ""
             source = ""
-            if sample_choice and sample_choice != "— none —":
+            if sample_choice and sample_choice != none_label:
                 path = _SAMPLE_REPORTS_DIR / sample_choice
                 text = path.read_text(encoding="utf-8")
                 source = sample_choice
@@ -76,7 +72,7 @@ def render(user: dict) -> None:
                 source = "pasted"
 
             if not text:
-                st.warning("Provide a report via sample, upload, or paste.")
+                st.warning(t("panel.report.need_input", lang))
             else:
                 conn = get_conn()
                 cur = conn.execute(
@@ -86,9 +82,9 @@ def render(user: dict) -> None:
                 conn.commit()
                 report_id = cur.lastrowid
 
-                with st.spinner("Three specialists reviewing independently…"):
+                with st.spinner(t("panel.report.spin_specialists", lang)):
                     opinions = specialist_panel.run_panel(text, report_id)
-                with st.spinner("Moderator synthesising…"):
+                with st.spinner(t("panel.report.spin_moderator", lang)):
                     consensus = moderator.synthesize(opinions, report_id)
 
                 ntfy_send(
@@ -111,32 +107,39 @@ def render(user: dict) -> None:
 
         last = st.session_state.get("last_panel")
         if last:
-            st.markdown(f"### Specialist opinions — report #{last['report_id']}")
+            st.markdown(
+                "### " + t("panel.report.opinions_header", lang, id=str(last["report_id"]))
+            )
             cols = st.columns(3)
             labels = {
-                "cardiology": "🫀 Cardiology",
-                "internal_medicine": "🩺 Internal medicine",
-                "radiology": "🖼️ Radiology",
+                "cardiology": t("panel.report.lbl_cardiology", lang),
+                "internal_medicine": t("panel.report.lbl_internal", lang),
+                "radiology": t("panel.report.lbl_radiology", lang),
             }
+            conf_label = t("panel.report.confidence", lang)
+            flags_label = t("panel.report.flags", lang)
             for col, op in zip(cols, last["opinions"]):
                 with col:
                     st.markdown(f"**{labels.get(op['specialist_type'], op['specialist_type'])}**")
-                    st.progress(op["confidence"], text=f"Confidence {op['confidence']:.2f}")
-                    st.markdown(op["findings"])
+                    st.progress(op["confidence"], text=f"{conf_label} {op['confidence']:.2f}")
+                    st.markdown(translate_dynamic(op["findings"], lang))
                     if op.get("flags"):
-                        st.caption("Flags: " + ", ".join(f"`{f}`" for f in op["flags"]))
+                        st.caption(flags_label + ": " + ", ".join(f"`{f}`" for f in op["flags"]))
 
-            st.markdown("### Moderator consensus")
+            st.markdown("### " + t("panel.report.consensus_header", lang))
             cons = last["consensus"]
-            st.markdown(f"**Summary.** {cons['summary']}")
+            st.markdown(
+                f"**{t('panel.report.summary', lang)}** "
+                + translate_dynamic(cons["summary"], lang)
+            )
 
             ca, cd = st.columns(2)
             with ca:
-                st.markdown("**Points of agreement**")
+                st.markdown("**" + t("panel.report.agreement", lang) + "**")
                 for p in cons["points_of_agreement"]:
-                    st.markdown(f"- {p}")
+                    st.markdown(f"- {translate_dynamic(p, lang)}")
             with cd:
-                st.markdown("**Points of disagreement**")
+                st.markdown("**" + t("panel.report.disagreement", lang) + "**")
                 disagreement = cons["points_of_disagreement"]
                 # Highlight in warning colour when there IS disagreement.
                 no_disag = (
@@ -144,10 +147,10 @@ def render(user: dict) -> None:
                     and "no material disagreement" in disagreement[0].lower()
                 )
                 if no_disag:
-                    st.info(disagreement[0])
+                    st.info(translate_dynamic(disagreement[0], lang))
                 else:
                     for p in disagreement:
-                        st.warning(p)
+                        st.warning(translate_dynamic(p, lang))
 
             st.caption(cons["disclaimer"])
 

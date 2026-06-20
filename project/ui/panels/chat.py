@@ -39,7 +39,7 @@ def render(user: dict) -> None:
                 st.session_state["_queued_user_text"] = transcript
                 st.rerun()
             else:
-                st.warning("Could not transcribe — please try again or type.")
+                st.warning(t("chat.voice_failed", lang))
 
     user_text = st.session_state.pop("_queued_user_text", None) or st.chat_input(t("chat.placeholder", lang))
     if not user_text:

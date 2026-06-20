@@ -15,6 +15,7 @@ import streamlit as st
 from ..common import disclaimer, lang_of
 from ...agents import booking_agent
 from ...agents.basic_chatbot import persist_message
+from ...i18n.translate import t, translate_dynamic
 from ...notifications.ntfy_client import send as ntfy_send, topic_for_user
 
 
@@ -23,7 +24,7 @@ def _consume_route(user: dict) -> None:
     if not req or req.get("route") != "booking":
         return
     ctx = booking_agent.BookingContext(user_id=user["user_id"], extracted=req.get("extracted", {}))
-    resp = booking_agent.process(ctx)
+    resp = booking_agent.process_agentic(ctx)
     st.session_state["pending_booking"] = {
         "message": resp.message,
         "alternatives": [a.model_dump() for a in resp.alternatives],
@@ -51,33 +52,32 @@ def render(user: dict) -> None:
     if not pb:
         return
 
-    st.subheader("Booking suggestions")
-    st.write(pb["message"])
+    lang = lang_of(user)
+    st.subheader(t("panel.booking.title", lang))
+    st.write(translate_dynamic(pb["message"], lang))
 
     if not pb.get("alternatives"):
-        st.info(
-            "No available alternatives in the next week. "
-            "Try another doctor or specialty."
-        )
-        if st.button("Dismiss", key="booking_dismiss_no_alts"):
+        st.info(t("panel.booking.no_alts", lang))
+        if st.button(t("panel.booking.dismiss", lang), key="booking_dismiss_no_alts"):
             st.session_state.pop("pending_booking", None)
             st.rerun()
         return
 
+    fee_label = t("panel.booking.fee", lang)
     # Display each alternative slot with a Book button
     for alt in pb["alternatives"]:
         col1, col2 = st.columns([4, 1])
         with col1:
             st.markdown(
                 f"**{alt['doctor_name']}** @ {alt['facility_name']}  \n"
-                f"{alt['date']} at {alt['time']} · Fee: LKR {alt['channeling_fee']:.0f}"
+                f"{alt['date']} at {alt['time']} · {fee_label}: LKR {alt['channeling_fee']:.0f}"
             )
         with col2:
-            if st.button("Book", key=f"book_{alt['slot_id']}"):
+            if st.button(t("panel.booking.book", lang), key=f"book_{alt['slot_id']}"):
                 # Attempt to book the selected slot
                 conf = booking_agent.book(user["user_id"], alt["slot_id"])
                 if conf is None:
-                    st.warning("That slot was just taken — please pick another.")
+                    st.warning(t("panel.booking.slot_taken", lang))
                 else:
                     # Send ntfy notification
                     topic = topic_for_user(user["user_id"])
@@ -103,13 +103,18 @@ def render(user: dict) -> None:
                     # Clean up session state and show success
                     st.session_state.pop("pending_booking", None)
                     st.success(
-                        f"Booked with {conf.doctor_name} on {conf.date} at {conf.time}. "
-                        "Push notification sent."
+                        t(
+                            "panel.booking.booked",
+                            lang,
+                            doctor=conf.doctor_name,
+                            date=conf.date,
+                            time=conf.time,
+                        )
                     )
                     st.rerun()
 
-    if st.button("Dismiss booking suggestions", key="booking_dismiss"):
+    if st.button(t("panel.booking.dismiss_all", lang), key="booking_dismiss"):
         st.session_state.pop("pending_booking", None)
         st.rerun()
 
-    st.markdown(disclaimer(lang_of(user)))
+    st.markdown(disclaimer(lang))
