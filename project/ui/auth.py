@@ -83,22 +83,46 @@ def load_user(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def current_user() -> Optional[dict]:
+def invalidate_user_cache() -> None:
+    """Drop the cached user dict so the next ``current_user()`` reloads from DB.
+
+    Call this after any write to the current user's ``User`` row (e.g. a profile
+    or preferred-language update). Without it, ``current_user()`` keeps serving a
+    stale dict for the whole session because the cache is keyed only on user_id.
+    """
+    st.session_state.pop("user_cache", None)
+
+
+def current_user(force_reload: bool = False) -> Optional[dict]:
     uid = st.session_state.get("user_id")
     if not uid:
         return None
-    cached = st.session_state.get("user_cache")
-    if cached and cached.get("user_id") == uid:
-        return cached
+    if not force_reload:
+        cached = st.session_state.get("user_cache")
+        if cached and cached.get("user_id") == uid:
+            return cached
     u = load_user(uid)
     if u:
         st.session_state["user_cache"] = u
     return u
 
 
+# Process-scoped session keys that must survive logout (not user-scoped).
+# `_db_inited` controls whether init_db() has run for this Streamlit
+# process; clearing it would re-seed on every logout.
+_PROCESS_SCOPED_KEYS = {"_db_inited"}
+
+
 def logout() -> None:
-    for k in ("user_id", "user_cache", "geo", "manual_geo"):
-        st.session_state.pop(k, None)
+    """Wipe every user-scoped key in session_state on logout.
+
+    Whitelist-based: clears everything except keys in
+    _PROCESS_SCOPED_KEYS. New panels/toggles added by teammates are
+    cleared automatically — no maintenance burden on each addition.
+    """
+    for k in list(st.session_state.keys()):
+        if k not in _PROCESS_SCOPED_KEYS:
+            del st.session_state[k]
 
 
 def render_auth_gate() -> Optional[dict]:
