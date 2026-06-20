@@ -222,8 +222,28 @@ _REM_PATTERNS = [
 _WORD_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "six": 6}
 
 
+def _has_booking_intent(text: str) -> bool:
+    """Check if text contains booking verbs/intents.
+    
+    Returns True if the user is explicitly trying to book or schedule,
+    preventing false-positive reminder detection for phrases like
+    'book me in 2 weeks' from being routed to reminders instead of booking.
+    """
+    booking_keywords = [
+        r"\b(?:book|appointment|schedule|slot|reserve|doctor|consult|specialist)\b"
+    ]
+    text_lower = text.lower()
+    return any(re.search(kw, text_lower) for kw in booking_keywords)
+
+
 def detect_reminder(text: str, today: Optional[dtdate] = None) -> Optional[str]:
-    """Return target_date_or_month string (YYYY-MM-DD or YYYY-MM) if matched."""
+    """Return target_date_or_month string (YYYY-MM-DD or YYYY-MM) if matched.
+    
+    Note: This is called BEFORE routing to booking. If the text contains
+    booking verbs, we skip reminder detection to avoid the collision
+    (e.g., 'book me in 2 weeks' should go to booking, not reminders).
+    That check is done by the caller.
+    """
     today = today or dtdate.today()
     s = text.strip()
 
@@ -303,7 +323,12 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
         )
 
     # Tier-3: rule-based reminder detection before the LLM call.
-    target = detect_reminder(user_text)
+    # IMPORTANT: Skip reminder detection if user has booking intent
+    # to avoid collision (e.g., 'book me in 2 weeks' should route to booking, not reminders).
+    target = None
+    if not _has_booking_intent(user_text):
+        target = detect_reminder(user_text)
+    
     if target is not None:
         rid = _persist_reminder(user_id, target, user_text)
         reply_en = (
