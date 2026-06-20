@@ -34,11 +34,3 @@ class PanelResult(BaseModel):
     opinions: list[SpecialistOpinion]
     consensus: ConsensusReport
     used_llm: bool
-
-
-class OcrConfirmation(BaseModel):
-    """User confirmation of OCR'd prescription text."""
-    prescription_id: int
-    ocr_text: str
-    user_edited_text: Optional[str] = None
-    confirmed: bool = False

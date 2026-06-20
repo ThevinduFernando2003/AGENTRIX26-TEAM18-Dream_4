@@ -41,3 +41,11 @@ class MedicineQuoteResult(BaseModel):
     unmatched_names: list[str] = Field(default_factory=list)
     quotes: list[PharmacyQuote] = Field(default_factory=list)
     message: str
+
+
+class OcrConfirmation(BaseModel):
+    """User confirmation of OCR'd prescription text (prescription/OCR flow)."""
+    prescription_id: int
+    ocr_text: str
+    user_edited_text: str | None = None
+    confirmed: bool = False
