@@ -46,3 +46,9 @@ extend-exclude = '''
     | project/db/.*\.db.*
 )/
 '''
+
+# ----- tests -----
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

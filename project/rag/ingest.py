@@ -25,7 +25,7 @@ from pathlib import Path
 
 import chromadb
 
-from .embeddings import RAG_PERSIST_DIR, get_embedding_function, using_gemini
+from . import embeddings
 
 logger = logging.getLogger("medbridge.rag.ingest")
 
@@ -101,8 +101,8 @@ _BUILDERS = {
 
 def ingest() -> dict[str, int]:
     """Build/refresh all collections. Returns {collection: chunk_count}."""
-    client = chromadb.PersistentClient(path=RAG_PERSIST_DIR)
-    embed_fn = get_embedding_function()
+    client = chromadb.PersistentClient(path=embeddings.RAG_PERSIST_DIR)
+    embed_fn = embeddings.get_embedding_function()
     counts: dict[str, int] = {}
 
     for name in ALL_COLLECTIONS:
@@ -129,8 +129,10 @@ def ingest() -> dict[str, int]:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    backend = "Gemini text-embedding-004" if using_gemini() else "local ONNX (offline)"
-    logger.info("[medbridge.rag] Ingesting KB with %s embeddings → %s", backend, RAG_PERSIST_DIR)
+    backend = "Gemini text-embedding-004" if embeddings.using_gemini() else "local ONNX (offline)"
+    logger.info(
+        "[medbridge.rag] Ingesting KB with %s embeddings → %s", backend, embeddings.RAG_PERSIST_DIR
+    )
     counts = ingest()
     for name, n in counts.items():
         logger.info("[medbridge.rag]   %-10s %d chunks", name, n)
