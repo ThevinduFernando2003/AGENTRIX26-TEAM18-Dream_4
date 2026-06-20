@@ -1,9 +1,5 @@
 -- MedBridge AI schema. Tier 1 builds against this; Tier 2/3 tables are
 -- defined now so later phases don't churn the schema.
---
--- Migrations: `CREATE TABLE IF NOT EXISTS` is a no-op against existing
--- DBs. To pick up schema changes (e.g. the AppointmentSlot UNIQUE
--- constraint), delete project/db/app.db and let init_db() rebuild.
 
 PRAGMA foreign_keys = ON;
 
@@ -83,11 +79,9 @@ CREATE TABLE IF NOT EXISTS AppointmentSlot (
     doctor_id    INTEGER NOT NULL REFERENCES Doctor(doctor_id),
     date         TEXT NOT NULL,
     time         TEXT NOT NULL,
-    is_available INTEGER NOT NULL DEFAULT 1,
-    UNIQUE(doctor_id, date, time)
+    is_available INTEGER NOT NULL DEFAULT 1
 );
--- The UNIQUE constraint above implies an index on (doctor_id, date, time),
--- so the previous explicit idx_slot_doctor_date is redundant and removed.
+CREATE INDEX IF NOT EXISTS idx_slot_doctor_date ON AppointmentSlot(doctor_id, date);
 
 CREATE TABLE IF NOT EXISTS Appointment (
     appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
