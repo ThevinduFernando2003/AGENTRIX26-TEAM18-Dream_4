@@ -9,6 +9,7 @@ import streamlit as st
 
 from ..db.db import get_conn
 from ..i18n.translate import t
+from .common import language_short_label, render_auth_rights_banner, render_top_banner
 
 
 def _hash_pw(plain: str) -> str:
@@ -83,6 +84,16 @@ def load_user(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def update_preferred_language(user_id: int, lang: str) -> None:
+    """Persist a new preferred_language for the given user."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE User SET preferred_language = ? WHERE user_id = ?",
+        (lang, user_id),
+    )
+    conn.commit()
+
+
 def invalidate_user_cache() -> None:
     """Drop the cached user dict so the next ``current_user()`` reloads from DB.
 
@@ -93,14 +104,47 @@ def invalidate_user_cache() -> None:
     st.session_state.pop("user_cache", None)
 
 
+def _restore_user_from_url() -> None:
+    """Recover ``user_id`` from ``?uid=`` so a browser refresh stays logged in.
+
+    Streamlit's ``session_state`` is wiped on hard refresh — without a URL or
+    cookie backup, every F5 drops the user to the login screen. We store
+    ``uid`` in ``st.query_params`` at login time and read it back here. The
+    value isn't signed, so this is "remember me" not "auth" — fine for the
+    demo's seeded mock data, not OK for real PHI.
+    """
+    if st.session_state.get("user_id"):
+        return
+    raw = st.query_params.get("uid")
+    if not raw:
+        return
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError):
+        return
+    if load_user(uid) is None:
+        # Stale / tampered URL — drop it instead of crashing.
+        try:
+            del st.query_params["uid"]
+        except KeyError:
+            pass
+        return
+    st.session_state["user_id"] = uid
+
+
 def current_user(force_reload: bool = False) -> Optional[dict]:
+    _restore_user_from_url()
     uid = st.session_state.get("user_id")
     if not uid:
         return None
-    if not force_reload:
-        cached = st.session_state.get("user_cache")
-        if cached and cached.get("user_id") == uid:
-            return cached
+    # Defence-in-depth: drop a stale ``user_cache`` from a previous user that
+    # somehow survived a partial logout.
+    cached = st.session_state.get("user_cache")
+    if cached and cached.get("user_id") != uid:
+        st.session_state.pop("user_cache", None)
+        cached = None
+    if not force_reload and cached:
+        return cached
     u = load_user(uid)
     if u:
         st.session_state["user_cache"] = u
@@ -123,6 +167,16 @@ def logout() -> None:
     for k in list(st.session_state.keys()):
         if k not in _PROCESS_SCOPED_KEYS:
             del st.session_state[k]
+    # Drop the ``?uid=`` remember-me marker so the next login isn't shadowed
+    # by the previous user's URL.
+    try:
+        st.query_params.clear()
+    except Exception:
+        # Older Streamlit builds may not support clear(); fall back to del.
+        try:
+            del st.query_params["uid"]
+        except KeyError:
+            pass
 
 
 def render_auth_gate() -> Optional[dict]:
@@ -136,8 +190,7 @@ def render_auth_gate() -> Optional[dict]:
     # the app proper, language flips to the user's choice.
     L = "en"
 
-    st.title(t("auth.title", L))
-    st.caption(t("auth.tagline", L))
+    render_top_banner(L)
 
     tab_login, tab_signup = st.tabs([t("auth.tab.login", L), t("auth.tab.signup", L)])
 
@@ -151,6 +204,8 @@ def render_auth_gate() -> Optional[dict]:
                     st.error(t("auth.invalid", L))
                 else:
                     st.session_state["user_id"] = uid
+                    # Persist across browser refresh — see _restore_user_from_url.
+                    st.query_params["uid"] = str(uid)
                     st.rerun()
 
     with tab_signup:
@@ -160,7 +215,12 @@ def render_auth_gate() -> Optional[dict]:
             full_name = st.text_input(t("auth.fullname", L), key="su_name")
             age = st.number_input(t("auth.age", L), min_value=0, max_value=120, value=30, key="su_age")
             gender = st.selectbox(t("auth.gender", L), ["", "M", "F", "Other"], key="su_gender")
-            lang = st.selectbox(t("auth.pref_lang", L), ["en", "si", "ta"], key="su_lang")
+            lang = st.selectbox(
+                t("auth.pref_lang", L),
+                ["en", "si", "ta"],
+                key="su_lang",
+                format_func=language_short_label,
+            )
             fc_name = st.text_input(t("auth.family_name", L), key="su_fcn")
             fc_phone = st.text_input(t("auth.family_phone", L), key="su_fcp")
             if st.form_submit_button(t("auth.signup_btn", L)):
@@ -169,4 +229,5 @@ def render_auth_gate() -> Optional[dict]:
                 )
                 (st.success if ok else st.error)(msg)
 
+    render_auth_rights_banner(L)
     return None
