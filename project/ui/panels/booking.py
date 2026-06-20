@@ -1,46 +1,59 @@
-"""Booking panel - owned by Thevindu.
+"""Booking panel: turns a routed booking intent into alternative slots, then books.
 
-Displays booking suggestions and handles appointment confirmation flow.
-Panel contract: render(user: dict) -> None
-  - Reads from st.session_state["pending_booking"]
-  - Modifies st.session_state as needed
-  - Calls booking_agent and ntfy services
+Owner: Thevindu (Phase 2 swaps ``booking_agent.process`` for a real Pydantic AI agent).
+
+Flow:
+1. Consume a ``route_request`` with route == "booking" → run the booking agent and
+   stash the result in ``st.session_state["pending_booking"]``.
+2. Render the pending alternatives with click-to-confirm + ntfy push.
 """
+
+from __future__ import annotations
 
 import streamlit as st
 
-from project.agents import booking_agent
-from project.agents.basic_chatbot import _persist_message
-from project.notifications.ntfy_client import send as ntfy_send, topic_for_user
+from ..common import disclaimer, lang_of
+from ...agents import booking_agent
+from ...agents.basic_chatbot import persist_message
+from ...notifications.ntfy_client import send as ntfy_send, topic_for_user
 
 
-def _get_disclaimer() -> str:
-    """Get disclaimer text - placeholder for i18n integration."""
-    from project.i18n.translate import t
-    lang = st.session_state.get("user", {}).get("preferred_language", "en") or "en"
-    return t("disclaimer.footer", lang)
+def _consume_route(user: dict) -> None:
+    req = st.session_state.get("route_request")
+    if not req or req.get("route") != "booking":
+        return
+    ctx = booking_agent.BookingContext(user_id=user["user_id"], extracted=req.get("extracted", {}))
+    resp = booking_agent.process(ctx)
+    st.session_state["pending_booking"] = {
+        "message": resp.message,
+        "alternatives": [a.model_dump() for a in resp.alternatives],
+    }
+    st.session_state.pop("route_request", None)
+    st.rerun()
 
 
 def render(user: dict) -> None:
     """Render the booking panel with pending booking suggestions.
-    
+
     Args:
         user: Current authenticated user dict
-        
+
     Contract:
-        - Reads st.session_state["pending_booking"]
-        - May modify st.session_state["pending_booking"]
-        - Calls booking_agent.book() for confirmations
-        - Sends ntfy notifications on successful booking
-        - Persists messages to chat history
+        - Consumes a "booking" ``route_request`` from the chat panel.
+        - Reads/modifies ``st.session_state["pending_booking"]``.
+        - Calls ``booking_agent.book()`` for confirmations.
+        - Sends ntfy notifications on successful booking.
+        - Persists messages to chat history.
     """
+    _consume_route(user)
+
     pb = st.session_state.get("pending_booking")
     if not pb:
         return
-    
+
     st.subheader("Booking suggestions")
     st.write(pb["message"])
-    
+
     if not pb.get("alternatives"):
         st.info(
             "No available alternatives in the next week. "
@@ -79,14 +92,14 @@ def render(user: dict) -> None:
                         tags=["calendar"],
                         notif_type="booking_confirmed",
                     )
-                    
+
                     # Persist confirmation to chat history
-                    _persist_message(
+                    persist_message(
                         user["user_id"], "assistant",
                         f"Appointment confirmed: {conf.doctor_name} at {conf.facility_name} on "
                         f"{conf.date} {conf.time}. (Appointment #{conf.appointment_id})",
                     )
-                    
+
                     # Clean up session state and show success
                     st.session_state.pop("pending_booking", None)
                     st.success(
@@ -94,9 +107,9 @@ def render(user: dict) -> None:
                         "Push notification sent."
                     )
                     st.rerun()
-    
+
     if st.button("Dismiss booking suggestions", key="booking_dismiss"):
         st.session_state.pop("pending_booking", None)
         st.rerun()
-    
-    st.markdown(_get_disclaimer())
+
+    st.markdown(disclaimer(lang_of(user)))

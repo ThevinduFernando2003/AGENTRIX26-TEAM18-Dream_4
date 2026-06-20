@@ -83,13 +83,24 @@ def load_user(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def current_user() -> Optional[dict]:
+def invalidate_user_cache() -> None:
+    """Drop the cached user dict so the next ``current_user()`` reloads from DB.
+
+    Call this after any write to the current user's ``User`` row (e.g. a profile
+    or preferred-language update). Without it, ``current_user()`` keeps serving a
+    stale dict for the whole session because the cache is keyed only on user_id.
+    """
+    st.session_state.pop("user_cache", None)
+
+
+def current_user(force_reload: bool = False) -> Optional[dict]:
     uid = st.session_state.get("user_id")
     if not uid:
         return None
-    cached = st.session_state.get("user_cache")
-    if cached and cached.get("user_id") == uid:
-        return cached
+    if not force_reload:
+        cached = st.session_state.get("user_cache")
+        if cached and cached.get("user_id") == uid:
+            return cached
     u = load_user(uid)
     if u:
         st.session_state["user_cache"] = u
