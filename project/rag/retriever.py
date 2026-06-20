@@ -1,10 +1,10 @@
 """Vector retrieval — the contract every Phase-2 caller depends on.
 
 Backed by the persistent Chroma index built by :mod:`project.rag.ingest`, embedded
-with :func:`project.rag.embeddings.get_embedding_function` (local ONNX offline,
-Gemini ``text-embedding-004`` when keyed). The offline / not-yet-ingested path
-returns ``[]`` cleanly and NEVER raises, so callers can always fall back to their
-deterministic heuristics.
+with :func:`project.rag.embeddings.get_embedding_function` (local ONNX by default,
+Gemini ``gemini-embedding-001`` when ``RAG_EMBED_BACKEND=gemini``). The offline /
+not-yet-ingested path returns ``[]`` cleanly and NEVER raises, so callers can always
+fall back to their deterministic heuristics.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ def render(user: dict) -> None:
     lang = user.get("preferred_language", "en") or "en"
     with st.sidebar:
         st.markdown(f"### 👤 {user.get('full_name') or user['username']}")
-        st.caption(f"Language: {lang}")
+        st.caption(f"{t('sidebar.language_label', lang)}: {lang}")
 
         st.warning(t("sidebar.mock_banner", lang))
 
@@ -32,17 +32,17 @@ def render(user: dict) -> None:
             if isinstance(geo_val, dict) and geo_val.get("latitude"):
                 st.session_state["geo"] = geo_val
         except Exception:
-            st.caption("(geolocation component unavailable — use manual entry below)")
+            st.caption(t("sidebar.geo_unavail", lang))
 
         lat, lng = get_geo()
         if lat is not None and lng is not None:
             st.success(f"📍 {lat:.4f}, {lng:.4f}")
         else:
-            st.info("Click the 📍 button above, or enter coordinates manually:")
+            st.info(t("sidebar.geo_prompt", lang))
 
         with st.expander(t("sidebar.location_manual", lang)):
-            m_lat = st.number_input("Latitude",  value=6.9271, format="%.6f")
-            m_lng = st.number_input("Longitude", value=79.8612, format="%.6f")
+            m_lat = st.number_input(t("sidebar.lat", lang),  value=6.9271, format="%.6f")
+            m_lng = st.number_input(t("sidebar.lng", lang), value=79.8612, format="%.6f")
             if st.button(t("sidebar.use_coords", lang)):
                 st.session_state["manual_geo"] = {"lat": m_lat, "lng": m_lng}
                 st.rerun()

@@ -22,12 +22,8 @@ def render(user: dict) -> None:
         return
     lang = lang_of(user)
     st.error(f"**{t('em.title', lang)}**")
-    st.markdown(f"**Triggered by:** {', '.join(em.get('matched_terms', []))}")
-    st.markdown(
-        "If you confirm, MedBridge AI will show a tap-to-call link for Sri Lanka emergency "
-        "services (**1990 Suwa Seriya**) and send a push notification to your saved family "
-        "contact via ntfy.sh."
-    )
+    st.markdown(f"**{t('em.triggered_by', lang)}:** {', '.join(em.get('matched_terms', []))}")
+    st.markdown(t("em.explain", lang))
 
     c1, c2 = st.columns(2)
     with c1:
@@ -73,8 +69,8 @@ def render(user: dict) -> None:
         if st.session_state.get("emergency_push_ok"):
             st.success(f"{t('em.family_notified', lang)} ({datetime.now().strftime('%H:%M:%S')})")
         else:
-            st.warning("Family push notification could not be sent (logged regardless). Please call 1990.")
-        if st.button("Dismiss and continue chatting"):
+            st.warning(t("em.push_failed", lang))
+        if st.button(t("em.dismiss_continue", lang)):
             for k in ("pending_emergency", "emergency_confirmed", "emergency_push_ok"):
                 st.session_state.pop(k, None)
             st.rerun()

@@ -3,10 +3,18 @@
 One factory so the vectors written at ingest time and the vectors used at query
 time always come from the *same* model — mixing models silently destroys recall.
 
-Strategy (per the free-tier + offline constraint):
-- ``GEMINI_API_KEY`` set  -> Gemini ``text-embedding-004`` (free tier).
-- no key / offline / CI   -> ChromaDB's bundled local model (ONNX MiniLM via
-  ``onnxruntime``). Real vector search, no network, no key.
+Strategy (default LOCAL so the index is independent of the chat/OCR API key):
+- Default                       -> ChromaDB's bundled local model (ONNX MiniLM via
+  ``onnxruntime``). Real vector search, no network, no key, no quota. This is the
+  "Local RAG" the proposal describes, and it keeps the persisted index consistent
+  whether or not ``GEMINI_API_KEY`` is set — so swapping in a paid key never
+  requires a re-ingest and never causes a dimension mismatch.
+- ``RAG_EMBED_BACKEND=gemini``  -> Gemini ``gemini-embedding-001`` (opt-in only;
+  requires a re-ingest because the vector dimension differs from the local model).
+
+Gemini embeddings are validated with a live health-check at factory time, so a
+missing/renamed model or an exhausted quota degrades cleanly back to the local
+model instead of silently returning empty results at query time.
 
 Both return a ChromaDB ``EmbeddingFunction`` so callers just pass the result to
 ``client.get_or_create_collection(..., embedding_function=...)``.
@@ -26,11 +34,13 @@ logger = logging.getLogger("medbridge.rag.embeddings")
 _DEFAULT_PERSIST = Path(__file__).resolve().parent / "chroma_store"
 RAG_PERSIST_DIR = os.environ.get("RAG_PERSIST_DIR", str(_DEFAULT_PERSIST))
 
-_GEMINI_EMBED_MODEL = "models/text-embedding-004"
+# gemini-embedding-001 is the current Generative Language API embedding model.
+# (text-embedding-004 has been retired and 404s on the v1beta catalog.)
+_GEMINI_EMBED_MODEL = os.environ.get("GEMINI_EMBED_MODEL", "models/gemini-embedding-001")
 
 
 class _GeminiEmbeddingFunction(EmbeddingFunction[Documents]):
-    """Wraps Gemini ``text-embedding-004`` as a ChromaDB embedding function."""
+    """Wraps Gemini ``gemini-embedding-001`` as a ChromaDB embedding function."""
 
     def __init__(self, api_key: str, model: str = _GEMINI_EMBED_MODEL) -> None:
         import google.generativeai as genai  # type: ignore
@@ -49,23 +59,37 @@ class _GeminiEmbeddingFunction(EmbeddingFunction[Documents]):
         return out
 
 
-def get_embedding_function() -> EmbeddingFunction:
-    """Return the active embedding function: Gemini if keyed, else local ONNX.
+def _gemini_requested() -> bool:
+    """Gemini embeddings are opt-in (``RAG_EMBED_BACKEND=gemini``) AND need a key.
 
-    Never raises: if the Gemini path can't initialise, fall back to local so RAG
-    keeps working.
+    Default is local ONNX so the index never depends on the chat/OCR key.
     """
-    key = os.environ.get("GEMINI_API_KEY")
-    if key:
+    return (
+        os.environ.get("RAG_EMBED_BACKEND", "local").lower() == "gemini"
+        and bool(os.environ.get("GEMINI_API_KEY"))
+    )
+
+
+def get_embedding_function() -> EmbeddingFunction:
+    """Return the active embedding function: local ONNX by default, Gemini if opted in.
+
+    Never raises: if the Gemini path can't initialise OR fails a live health-check
+    (renamed model, exhausted quota, offline), fall back to the local model so RAG
+    keeps working and the persisted index stays consistent.
+    """
+    if _gemini_requested():
         try:
-            return _GeminiEmbeddingFunction(api_key=key)
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Gemini embeddings unavailable, using local model: %s", exc)
+            fn = _GeminiEmbeddingFunction(api_key=os.environ["GEMINI_API_KEY"])
+            fn(["health-check"])  # validate at call time, not just configure time
+            logger.info("RAG embeddings: using Gemini %s", _GEMINI_EMBED_MODEL)
+            return fn
+        except Exception as exc:
+            logger.warning("Gemini embeddings unavailable (%s) — using local model", exc)
     from chromadb.utils import embedding_functions
 
     return embedding_functions.DefaultEmbeddingFunction()
 
 
 def using_gemini() -> bool:
-    """True when the Gemini embedding path is active (for logging/diagnostics)."""
-    return bool(os.environ.get("GEMINI_API_KEY"))
+    """True when the Gemini embedding path is requested (for logging/diagnostics)."""
+    return _gemini_requested()

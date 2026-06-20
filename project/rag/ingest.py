@@ -12,8 +12,8 @@ Three collections are produced, each queried by :func:`project.rag.retrieve`:
 
 Idempotent: every chunk gets a deterministic id (sha1 of collection+text), so a
 re-run ``upsert``s in place instead of creating duplicate vectors. Embeddings come
-from :func:`project.rag.embeddings.get_embedding_function` (local ONNX offline,
-Gemini ``text-embedding-004`` when ``GEMINI_API_KEY`` is set).
+from :func:`project.rag.embeddings.get_embedding_function` (local ONNX by default,
+Gemini ``gemini-embedding-001`` when ``RAG_EMBED_BACKEND=gemini``).
 """
 
 from __future__ import annotations
@@ -130,9 +130,35 @@ def ingest() -> dict[str, int]:
     return counts
 
 
+def ensure_ingested() -> bool:
+    """Build the index once if any collection is missing or empty. Idempotent.
+
+    Safe to call at app boot: never raises, returns True if it (re)built. Uses the
+    default LOCAL embedding backend so it needs no API key and consumes no quota.
+    """
+    try:
+        client = chromadb.PersistentClient(path=embeddings.RAG_PERSIST_DIR)
+        existing = {c.name for c in client.list_collections()}
+        need = False
+        for name in ALL_COLLECTIONS:
+            if name not in existing or client.get_collection(name).count() == 0:
+                need = True
+                break
+        if need:
+            logger.info("[medbridge.rag] index missing/empty — building once…")
+            ingest()
+            return True
+        return False
+    except Exception as exc:  # never block app boot on RAG
+        logger.warning("[medbridge.rag] auto-ingest skipped: %s", exc)
+        return False
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    backend = "Gemini text-embedding-004" if embeddings.using_gemini() else "local ONNX (offline)"
+    backend = (
+        "Gemini gemini-embedding-001" if embeddings.using_gemini() else "local ONNX (offline)"
+    )
     logger.info(
         "[medbridge.rag] Ingesting KB with %s embeddings → %s", backend, embeddings.RAG_PERSIST_DIR
     )
