@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medbridge"
+version = "0.3.0"
+description = "MedBridge AI — multi-agent healthcare navigator (Team Dream_4 · AgenTrix 2026)"
+requires-python = ">=3.11"
+authors = [{ name = "Team Dream_4" }]
+readme = "Readme.md"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["project/requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["project*"]
+
+# ----- lint / format -----
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "project/db/app.db", "project/db/*.db-*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",  # line length — black owns this
+    "B008",  # function calls in argument defaults are common in Pydantic/Streamlit
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-export shims and __init__.py files legitimately have unused imports.
+"project/models/__init__.py" = ["F401"]
+"project/**/__init__.py" = ["F401"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = '''
+/(
+    \.venv
+    | project/db/.*\.db.*
+)/
+'''
+
+# ----- tests -----
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

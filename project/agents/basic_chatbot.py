@@ -19,12 +19,13 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import date as dtdate, timedelta
-from typing import Optional
+from datetime import date as dtdate
+from datetime import timedelta
 
 from ..db.db import get_conn
 from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
+from ..rag import retrieve
 from . import emergency
 
 logger = logging.getLogger("medbridge.chatbot")
@@ -34,13 +35,19 @@ _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 # ---------- persistence helpers ----------
 
-def _persist_message(user_id: int, role: str, content: str) -> None:
+
+def persist_message(user_id: int, role: str, content: str) -> None:
+    """Append a chat turn to ChatMessage. Public entry point used by UI panels."""
     conn = get_conn()
     conn.execute(
         "INSERT INTO ChatMessage(user_id, role, content) VALUES(?,?,?)",
         (user_id, role, content),
     )
     conn.commit()
+
+
+# Back-compat alias for existing internal callers.
+_persist_message = persist_message
 
 
 def load_history(user_id: int, limit: int = 10) -> list[dict]:
@@ -93,7 +100,7 @@ class ChatResult:
     reply: str
     route: str
     extracted: dict
-    emergency: Optional[EmergencyDecision] = None
+    emergency: EmergencyDecision | None = None
 
 
 _crew_agent = None  # lazy init
@@ -107,7 +114,8 @@ def _get_agent():
     if not os.environ.get("GEMINI_API_KEY"):
         return None
     try:
-        from crewai import Agent, LLM  # type: ignore
+        from crewai import LLM, Agent  # type: ignore
+
         llm = LLM(model=f"gemini/{_GEMINI_MODEL}", api_key=os.environ["GEMINI_API_KEY"])
         _crew_agent = Agent(
             role="Healthcare Navigator Orchestrator",
@@ -129,12 +137,13 @@ def _get_agent():
         return None
 
 
-def _run_llm(user_text: str, transcript: str) -> Optional[dict]:
+def _run_llm(user_text: str, transcript: str) -> dict | None:
     agent = _get_agent()
     if agent is None:
         return None
     try:
-        from crewai import Task, Crew  # type: ignore
+        from crewai import Crew, Task  # type: ignore
+
         task = Task(
             description=(
                 _SYSTEM
@@ -159,7 +168,7 @@ def _run_llm(user_text: str, transcript: str) -> Optional[dict]:
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
-def _extract_json(raw: str) -> Optional[dict]:
+def _extract_json(raw: str) -> dict | None:
     m = _JSON_RE.search(raw)
     if not m:
         return None
@@ -171,19 +180,34 @@ def _extract_json(raw: str) -> Optional[dict]:
 
 # ---------- offline / fallback router ----------
 
+
 def _heuristic_route(text: str) -> dict:
     """Used when the LLM isn't available — keyword routing so the demo still moves."""
     t = text.lower()
     if any(k in t for k in ("book", "appointment", "channel", "see dr", "see doctor", "consult")):
         return {"route": "booking", "reply": "Let me find an appointment for you.", "extracted": {}}
     if any(k in t for k in ("medicine", "tablet", "pill", "pharmacy", "price")):
-        return {"route": "medicine", "reply": "I'll check pharmacy prices for you.", "extracted": {}}
+        return {
+            "route": "medicine",
+            "reply": "I'll check pharmacy prices for you.",
+            "extracted": {},
+        }
     if any(
         k in t
         for k in (
-            "report", "scan", "x-ray", "xray", "ecg", "echo",
-            "blood test", "lab result", "mri", "ct scan", "ultrasound",
-            "review my", "second opinion",
+            "report",
+            "scan",
+            "x-ray",
+            "xray",
+            "ecg",
+            "echo",
+            "blood test",
+            "lab result",
+            "mri",
+            "ct scan",
+            "ultrasound",
+            "review my",
+            "second opinion",
         )
     ):
         return {
@@ -201,24 +225,76 @@ def _heuristic_route(text: str) -> dict:
     }
 
 
+# ---------- RAG grounding (symptom → specialty navigation) ----------
+
+# Minimum cosine similarity before we trust a retrieved specialty. The curated
+# notes are short and asymmetric to a patient's phrasing, so scores run modest;
+# 0.2 cleanly separates on-topic symptom text from unrelated chatter in testing.
+_SPECIALTY_MIN_SCORE = 0.2
+
+
+def ground_specialty(text: str) -> str | None:
+    """Map a free-text symptom description to a specialty via the RAG index.
+
+    This is navigation, NOT diagnosis — it answers "which kind of doctor", never
+    "what disease". Returns the specialty name, or None when nothing is confidently
+    relevant or the index isn't available (offline-safe: retrieve() returns []).
+    """
+    hits = retrieve(text, "symptoms", k=3)
+    if not hits:
+        return None
+    top = hits[0]
+    if top["score"] < _SPECIALTY_MIN_SCORE:
+        return None
+    specialty = (top.get("metadata") or {}).get("specialty")
+    return specialty or None
+
+
 # ---------- future-visit reminder detection (Tier 3) ----------
 
 _REM_PATTERNS = [
     # come back / follow up / see me again — in N units
-    re.compile(r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return)\s+(?:in\s+)?(\d+)\s*(day|days|week|weeks|month|months)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return)\s+(?:in\s+)?(\d+)\s*(day|days|week|weeks|month|months)\b",
+        re.IGNORECASE,
+    ),
     # come back / follow up — in (a|one|two) month/week
-    re.compile(r"\b(?:come back|follow[- ]?up|return)\s+(?:in\s+)?(a|an|one|two|three|four|six)\s+(day|week|month)s?\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:come back|follow[- ]?up|return)\s+(?:in\s+)?(a|an|one|two|three|four|six)\s+(day|week|month)s?\b",
+        re.IGNORECASE,
+    ),
     # explicit ISO date
     re.compile(r"\b(?:on|by)\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE),
     # "next month" / "next week"
-    re.compile(r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return).{0,40}\bnext\s+(week|month)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return).{0,40}\bnext\s+(week|month)\b",
+        re.IGNORECASE,
+    ),
 ]
 
 _WORD_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "six": 6}
 
 
-def detect_reminder(text: str, today: Optional[dtdate] = None) -> Optional[str]:
-    """Return target_date_or_month string (YYYY-MM-DD or YYYY-MM) if matched."""
+def _has_booking_intent(text: str) -> bool:
+    """Check if text contains booking verbs/intents.
+
+    Returns True if the user is explicitly trying to book or schedule,
+    preventing false-positive reminder detection for phrases like
+    'book me in 2 weeks' from being routed to reminders instead of booking.
+    """
+    booking_keywords = [r"\b(?:book|appointment|schedule|slot|reserve|doctor|consult|specialist)\b"]
+    text_lower = text.lower()
+    return any(re.search(kw, text_lower) for kw in booking_keywords)
+
+
+def detect_reminder(text: str, today: dtdate | None = None) -> str | None:
+    """Return target_date_or_month string (YYYY-MM-DD or YYYY-MM) if matched.
+
+    Note: This is called BEFORE routing to booking. If the text contains
+    booking verbs, we skip reminder detection to avoid the collision
+    (e.g., 'book me in 2 weeks' should go to booking, not reminders).
+    That check is done by the caller.
+    """
     today = today or dtdate.today()
     s = text.strip()
 
@@ -278,6 +354,7 @@ def _persist_reminder(user_id: int, target: str, source_text: str) -> int:
 
 # ---------- public entry point ----------
 
+
 def handle(user_id: int, user_text: str, preferred_language: str = "en") -> ChatResult:
     user_text = (user_text or "").strip()
     if not user_text:
@@ -298,14 +375,23 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
         )
 
     # Tier-3: rule-based reminder detection before the LLM call.
-    target = detect_reminder(user_text)
+    # IMPORTANT: Skip reminder detection if user has booking intent
+    # to avoid collision (e.g., 'book me in 2 weeks' should route to booking, not reminders).
+    target = None
+    if not _has_booking_intent(user_text):
+        target = detect_reminder(user_text)
+
     if target is not None:
         rid = _persist_reminder(user_id, target, user_text)
         reply_en = (
             f"Got it — I've saved a reminder for around {target}. "
             f"Use 'Check my reminders' in the sidebar when you'd like to be pinged."
         )
-        reply = translate_dynamic(reply_en, preferred_language) if preferred_language != "en" else reply_en
+        reply = (
+            translate_dynamic(reply_en, preferred_language)
+            if preferred_language != "en"
+            else reply_en
+        )
         _persist_message(user_id, "assistant", reply)
         return ChatResult(
             reply=reply,
@@ -320,7 +406,23 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
     try:
         out = RouterOutput(**parsed)
     except Exception:
-        out = RouterOutput(route="general", reply=parsed.get("reply", "How can I help?"), extracted={})
+        out = RouterOutput(
+            route="general", reply=parsed.get("reply", "How can I help?"), extracted={}
+        )
+
+    # RAG grounding: surface the right specialty from the curated index so we never
+    # invent one. For triage chat we add a gentle navigation suggestion to the reply;
+    # for booking we hand the grounded specialty to the booking agent via `extracted`.
+    if out.route in ("general", "booking"):
+        grounded = ground_specialty(user_text)
+        if grounded:
+            out.extracted.setdefault("specialty", grounded)
+            if out.route == "general":
+                out.reply = (
+                    out.reply.rstrip()
+                    + f" Based on what you describe, a {grounded} doctor may be the most "
+                    "appropriate to see — I can help you book one if you'd like."
+                )
 
     # Tier-3: translate the assistant reply if user prefers Si/Ta.
     final_reply = out.reply

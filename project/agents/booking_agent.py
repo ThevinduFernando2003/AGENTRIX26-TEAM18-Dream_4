@@ -24,8 +24,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import date as dtdate, datetime, timedelta
-from typing import Optional
+from datetime import date as dtdate
+from datetime import datetime, timedelta
 
 from ..db.db import get_conn
 from ..models import (
@@ -33,11 +33,15 @@ from ..models import (
     BookingConfirmation,
     BookingResponse,
 )
+from ..rag import retrieve
 
 logger = logging.getLogger("medbridge.booking")
 
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+
 
 # ---------- pure SQL tools ----------
+
 
 def find_doctors(query: str) -> list[dict]:
     """Match on doctor name OR specialty name (case-insensitive contains)."""
@@ -57,7 +61,7 @@ def find_doctors(query: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def find_slot(doctor_id: int, date_str: str, time_str: str) -> Optional[dict]:
+def find_slot(doctor_id: int, date_str: str, time_str: str) -> dict | None:
     conn = get_conn()
     row = conn.execute(
         """SELECT slot_id, doctor_id, date, time, is_available
@@ -68,7 +72,9 @@ def find_slot(doctor_id: int, date_str: str, time_str: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def nearest_alternatives(doctor_id: int, target_dt: datetime, limit: int = 5) -> list[AlternativeSlot]:
+def nearest_alternatives(
+    doctor_id: int, target_dt: datetime, limit: int = 5
+) -> list[AlternativeSlot]:
     """Available slots for the same doctor within ±7 days, sorted by proximity."""
     conn = get_conn()
     lo = (target_dt.date() - timedelta(days=7)).isoformat()
@@ -107,7 +113,7 @@ def nearest_alternatives(doctor_id: int, target_dt: datetime, limit: int = 5) ->
     ]
 
 
-def book(user_id: int, slot_id: int) -> Optional[BookingConfirmation]:
+def book(user_id: int, slot_id: int) -> BookingConfirmation | None:
     """Atomically book a slot. Returns None if the slot is already taken."""
     conn = get_conn()
     try:
@@ -151,7 +157,7 @@ def book(user_id: int, slot_id: int) -> Optional[BookingConfirmation]:
 _TIME_RE = re.compile(r"(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
 
 
-def parse_date(raw: Optional[str], today: Optional[dtdate] = None) -> Optional[str]:
+def parse_date(raw: str | None, today: dtdate | None = None) -> str | None:
     if not raw:
         return None
     today = today or dtdate.today()
@@ -182,7 +188,7 @@ def parse_date(raw: Optional[str], today: Optional[dtdate] = None) -> Optional[s
     return None
 
 
-def parse_time(raw: Optional[str]) -> Optional[str]:
+def parse_time(raw: str | None) -> str | None:
     if not raw:
         return None
     s = raw.strip().lower()
@@ -202,6 +208,7 @@ def parse_time(raw: Optional[str]) -> Optional[str]:
 
 
 # ---------- orchestrator ----------
+
 
 @dataclass
 class BookingContext:
@@ -233,7 +240,9 @@ def process(ctx: BookingContext) -> BookingResponse:
 
     if not date_str or not time_str:
         # Show next 5 available across the matched doctor's calendar.
-        target = datetime.combine(dtdate.today() + timedelta(days=1), datetime.min.time().replace(hour=10))
+        target = datetime.combine(
+            dtdate.today() + timedelta(days=1), datetime.min.time().replace(hour=10)
+        )
         alts = nearest_alternatives(doctor["doctor_id"], target)
         if not alts:
             return BookingResponse(
@@ -285,3 +294,126 @@ def process(ctx: BookingContext) -> BookingResponse:
             "Here are the closest available alternatives:"
         ),
     )
+
+
+# ---------- Pydantic AI agent (LLM path; deterministic process() is the fallback) ----------
+
+
+@dataclass
+class BookingDeps:
+    """Dependencies injected into agent tool calls."""
+
+    user_id: int
+
+
+_AGENT_INSTRUCTIONS = (
+    "You are MedBridge AI's booking assistant for patients in Sri Lanka. Turn the "
+    "patient's request into a BookingResponse using ONLY the provided tools.\n"
+    "Steps:\n"
+    "1. Call search_doctors with the doctor name or specialty (it resolves fuzzy "
+    "   text like 'heart doctor' to real specialties). If it returns nothing, set "
+    "   status='not_found' with a helpful message.\n"
+    "2. Call available_slots for the chosen doctor (pass the patient's preferred date/"
+    "   time if any) and put the returned slots into 'alternatives'.\n"
+    "Rules:\n"
+    "- NEVER invent doctors, facilities, slots, dates, times, or fees. Use only what "
+    "  the tools return.\n"
+    "- NEVER set status='booked'. Booking is confirmed by the patient in the UI. Use "
+    "  'alternatives' when slots exist, 'not_found' when none, 'needs_info' if the "
+    "  request lacks a doctor/specialty.\n"
+    "- Keep 'message' to 1-2 warm, factual sentences. Never give medical advice."
+)
+
+_booking_agent = None  # lazy init
+
+
+def _get_booking_agent():
+    """Lazily build the Pydantic AI booking agent. None if key/lib unavailable."""
+    global _booking_agent
+    if _booking_agent is not None:
+        return _booking_agent
+    if not os.environ.get("GEMINI_API_KEY"):
+        return None
+    try:
+        from pydantic_ai import Agent, RunContext
+        from pydantic_ai.models.gemini import GeminiModel
+        from pydantic_ai.providers.google_gla import GoogleGLAProvider
+
+        model = GeminiModel(
+            _GEMINI_MODEL, provider=GoogleGLAProvider(api_key=os.environ["GEMINI_API_KEY"])
+        )
+        agent = Agent(
+            model,
+            output_type=BookingResponse,
+            deps_type=BookingDeps,
+            instructions=_AGENT_INSTRUCTIONS,
+        )
+
+        @agent.tool
+        def search_doctors(ctx: RunContext[BookingDeps], query: str) -> list[dict]:
+            """Find doctors by name or specialty. Resolves fuzzy text via RAG first."""
+            results = find_doctors(query)
+            if not results:
+                for hit in retrieve(query, "facilities", k=3):
+                    specialty = (hit.get("metadata") or {}).get("specialty")
+                    if specialty:
+                        results = find_doctors(specialty)
+                        if results:
+                            break
+            return results
+
+        @agent.tool
+        def available_slots(
+            ctx: RunContext[BookingDeps],
+            doctor_id: int,
+            around_date: str | None = None,
+            around_time: str | None = None,
+        ) -> list[dict]:
+            """Available slots for a doctor within ±7 days of an optional target."""
+            d = parse_date(around_date) if around_date else None
+            t = parse_time(around_time) if around_time else None
+            if d and t:
+                target = datetime.fromisoformat(f"{d}T{t}")
+            else:
+                target = datetime.combine(
+                    dtdate.today() + timedelta(days=1),
+                    datetime.min.time().replace(hour=10),
+                )
+            return [a.model_dump() for a in nearest_alternatives(doctor_id, target)]
+
+        _booking_agent = agent
+        return _booking_agent
+    except Exception as exc:
+        logger.warning("Pydantic AI booking agent unavailable: %s", exc)
+        return None
+
+
+def _agent_prompt(extracted: dict) -> str:
+    parts = []
+    for key in ("doctor_name", "specialty", "date", "time"):
+        if extracted.get(key):
+            parts.append(f"{key}: {extracted[key]}")
+    detail = "; ".join(parts) if parts else "(no structured fields extracted)"
+    return f"Patient booking request — {detail}. Find and propose available slots."
+
+
+def process_agentic(ctx: BookingContext) -> BookingResponse:
+    """LLM-driven booking via Pydantic AI; falls back to deterministic process().
+
+    Booking itself is never performed here — the agent only proposes slots; the
+    atomic book() in the UI does the write. Any fabricated 'booked' status from the
+    LLM is downgraded so a confirmation can never be hallucinated.
+    """
+    agent = _get_booking_agent()
+    if agent is None:
+        return process(ctx)
+    try:
+        result = agent.run_sync(_agent_prompt(ctx.extracted), deps=BookingDeps(user_id=ctx.user_id))
+        resp = result.output
+        if resp.status == "booked":
+            resp.status = "alternatives" if resp.alternatives else "needs_info"
+            resp.confirmation = None
+        return resp
+    except Exception as exc:
+        logger.warning("Booking agent run failed, using deterministic fallback: %s", exc)
+        return process(ctx)

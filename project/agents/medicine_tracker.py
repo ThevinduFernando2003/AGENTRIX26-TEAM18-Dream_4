@@ -12,7 +12,6 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from ..db.db import get_conn
 from ..models import (
@@ -21,9 +20,37 @@ from ..models import (
     OcrConfirmation,
     PharmacyQuote,
 )
+from ..rag import retrieve
 from . import vision_ocr
 
 logger = logging.getLogger("medbridge.medicine")
+
+# RAG resolution thresholds. A small embedding model rates *any* drug-like token as
+# similar to *every* catalog drug, so cosine score alone gives false positives
+# (e.g. "aspirin"→"Atorvastatin"). We require BOTH a minimum cosine score AND a
+# character-level closeness to the resolved name's primary token, so only genuine
+# spelling variants ("parasetmol"→"Paracetamol") pass — semantic recall, edit-distance precision.
+_MED_RAG_MIN_SCORE = 0.3
+_MED_NAME_CHAR_RATIO = 0.6
+
+
+def _rag_resolve_medicine(raw: str) -> str | None:
+    """Resolve a misspelled name to a catalog name via the RAG index.
+
+    Offline-safe: retrieve() returns [] without an index, so this returns None and
+    the caller keeps the existing substring/difflib behaviour.
+    """
+    hits = retrieve(raw, "medicines", k=1)
+    if not hits or hits[0]["score"] < _MED_RAG_MIN_SCORE:
+        return None
+    name = (hits[0].get("metadata") or {}).get("name")
+    if not name:
+        return None
+    # Precision guard: reject semantically-similar but different drugs and nonsense.
+    primary = name.split()[0].lower()
+    if difflib.SequenceMatcher(None, raw.strip().lower(), primary).ratio() < _MED_NAME_CHAR_RATIO:
+        return None
+    return name
 
 
 def _all_medicine_names() -> list[tuple[int, str]]:
@@ -48,10 +75,17 @@ def match_medicines(names: list[str]) -> tuple[list[int], list[str], list[str]]:
             continue
         hit = next(((mid, n) for mid, n, ln in lower_catalog if q in ln or ln in q), None)
         if not hit:
-            close = difflib.get_close_matches(q, [ln for _, _, ln in lower_catalog], n=1, cutoff=0.7)
+            close = difflib.get_close_matches(
+                q, [ln for _, _, ln in lower_catalog], n=1, cutoff=0.7
+            )
             if close:
                 ln = close[0]
                 hit = next(((mid, n) for mid, n, x in lower_catalog if x == ln), None)
+        if not hit:
+            # RAG fallback: vector-match misspellings/brands difflib missed.
+            rag_name = _rag_resolve_medicine(raw)
+            if rag_name:
+                hit = next(((mid, n) for mid, n, _ in lower_catalog if n == rag_name), None)
         if hit and hit[0] not in seen_ids:
             matched_ids.append(hit[0])
             matched_names.append(hit[1])
@@ -146,13 +180,14 @@ def dosage_for(medicine_ids: list[int]) -> dict[int, str]:
 
 # ---------- orchestrator ----------
 
+
 @dataclass
 class MedicineContext:
     user_id: int
     raw_text: str
-    extracted_names: Optional[list[str]] = None
-    user_lat: Optional[float] = None
-    user_lng: Optional[float] = None
+    extracted_names: list[str] | None = None
+    user_lat: float | None = None
+    user_lng: float | None = None
 
 
 _SPLIT_RE = re.compile(r"[,\n;]| and ", re.IGNORECASE)
@@ -255,6 +290,7 @@ def process(ctx: MedicineContext) -> MedicineQuoteResult:
 
 # ---------- prescription OCR flow (Tier 2) ----------
 
+
 def process_prescription(
     user_id: int,
     image_bytes: bytes,
@@ -285,8 +321,8 @@ def confirm_prescription(
     prescription_id: int,
     final_text: str,
     user_id: int,
-    user_lat: Optional[float] = None,
-    user_lng: Optional[float] = None,
+    user_lat: float | None = None,
+    user_lng: float | None = None,
 ) -> MedicineQuoteResult:
     """User has approved/edited the OCR text. Persist + run pharmacy search."""
     final_text = (final_text or "").strip()
@@ -297,12 +333,14 @@ def confirm_prescription(
     )
     conn.commit()
 
-    return process(MedicineContext(
-        user_id=user_id,
-        raw_text=final_text,
-        user_lat=user_lat,
-        user_lng=user_lng,
-    ))
+    return process(
+        MedicineContext(
+            user_id=user_id,
+            raw_text=final_text,
+            user_lat=user_lat,
+            user_lng=user_lng,
+        )
+    )
 
 
 def record_text_prescription(user_id: int, text: str) -> int:

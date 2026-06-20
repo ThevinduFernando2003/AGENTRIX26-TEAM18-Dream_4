@@ -1,0 +1,37 @@
+{
+  "_note": "SEED DATA — not live. Curated symptom→specialty navigation notes for RAG triage. These map common complaints to the RIGHT TYPE of doctor. They are NOT diagnoses and never name a disease or treatment — only which specialty a patient should consider seeing. Specialties must match seed_facilities.json.",
+  "notes": [
+    {
+      "specialty": "Cardiology",
+      "text": "Chest pain or chest tightness, pressure or heaviness in the chest, palpitations or a racing/irregular heartbeat, breathlessness on exertion, fainting spells, or swelling of the ankles are typically seen by a Cardiology (heart) specialist. Severe or sudden chest pain with sweating or breathlessness is an emergency."
+    },
+    {
+      "specialty": "Dermatology",
+      "text": "Skin rashes, itching, acne, eczema, persistent dry or flaky skin, changes in a mole, hair loss, nail problems, or fungal infections are handled by a Dermatology (skin) specialist."
+    },
+    {
+      "specialty": "ENT",
+      "text": "Ear pain, hearing difficulty, ringing in the ears, blocked or runny nose, sinus pressure, sore throat that will not settle, hoarseness, tonsil problems, or dizziness/vertigo are seen by an ENT (ear, nose and throat) specialist."
+    },
+    {
+      "specialty": "Pediatrics",
+      "text": "Health concerns for a baby, infant, child or teenager — fever in a child, childhood vaccinations, feeding or growth concerns, or a sick young child — are seen by a Pediatrics (children's health) specialist."
+    },
+    {
+      "specialty": "Internal Medicine",
+      "text": "Long-standing adult conditions such as diabetes, high blood pressure, thyroid problems, persistent fatigue, unexplained weight change, or managing several chronic illnesses together are handled by an Internal Medicine physician."
+    },
+    {
+      "specialty": "General Practice",
+      "text": "Common everyday complaints — mild fever, cough and cold, general aches, minor infections, a first check-up, or when you are unsure which specialist you need — start with a General Practice (GP / family doctor) consultation, who can refer you onward."
+    },
+    {
+      "specialty": "General Practice",
+      "text": "Headache, body aches, tiredness, mild stomach upset, or a general feeling of being unwell with no clear single cause are usually seen first by a General Practice doctor."
+    },
+    {
+      "specialty": "Internal Medicine",
+      "text": "Stomach pain, acid reflux or heartburn, ongoing digestive problems, or abnormal blood-sugar and cholesterol results in an adult are commonly reviewed by an Internal Medicine physician."
+    }
+  ]
+}
