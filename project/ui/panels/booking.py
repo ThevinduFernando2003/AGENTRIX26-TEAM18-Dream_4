@@ -23,7 +23,7 @@ def _consume_route(user: dict) -> None:
     if not req or req.get("route") != "booking":
         return
     ctx = booking_agent.BookingContext(user_id=user["user_id"], extracted=req.get("extracted", {}))
-    resp = booking_agent.process(ctx)
+    resp = booking_agent.process_agentic(ctx)
     st.session_state["pending_booking"] = {
         "message": resp.message,
         "alternatives": [a.model_dump() for a in resp.alternatives],
