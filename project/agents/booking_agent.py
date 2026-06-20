@@ -39,6 +39,31 @@ logger = logging.getLogger("medbridge.booking")
 
 _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
+# Pydantic AI is imported at MODULE level (not inside the factory) on purpose.
+# The tool functions are annotated `ctx: RunContext[BookingDeps]`; under
+# `from __future__ import annotations` those hints are strings that @agent.tool
+# resolves via get_type_hints against the function's *module* globals. With the
+# imports buried inside _get_booking_agent(), `RunContext` was absent from module
+# globals → `NameError: name 'RunContext' is not defined` → the agent build threw,
+# was swallowed, and EVERY booking silently fell back to the deterministic path.
+# Hoisting them here is what makes the headline Pydantic AI agent actually run.
+try:
+    from pydantic_ai import Agent, RunContext
+    from pydantic_ai.models.gemini import GeminiModel
+    from pydantic_ai.providers.google_gla import GoogleGLAProvider
+    from pydantic_ai.usage import UsageLimits
+
+    _PYDANTIC_AI_AVAILABLE = True
+except Exception:  # library missing/incompatible — deterministic path only
+    Agent = RunContext = GeminiModel = GoogleGLAProvider = UsageLimits = None  # type: ignore
+    _PYDANTIC_AI_AVAILABLE = False
+
+# Per-request wall-clock cap for the agent's tool loop, plus a hard cap on the
+# number of model round-trips. Any timeout/limit/exception transparently falls
+# back to the deterministic process(), so the agent can never hang the booking UI.
+_AGENT_TIMEOUT_S = 8.0
+_AGENT_REQUEST_LIMIT = 6
+
 
 # ---------- pure SQL tools ----------
 
@@ -332,13 +357,9 @@ def _get_booking_agent():
     global _booking_agent
     if _booking_agent is not None:
         return _booking_agent
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not os.environ.get("GEMINI_API_KEY") or not _PYDANTIC_AI_AVAILABLE:
         return None
     try:
-        from pydantic_ai import Agent, RunContext
-        from pydantic_ai.models.gemini import GeminiModel
-        from pydantic_ai.providers.google_gla import GoogleGLAProvider
-
         model = GeminiModel(
             _GEMINI_MODEL, provider=GoogleGLAProvider(api_key=os.environ["GEMINI_API_KEY"])
         )
@@ -347,6 +368,7 @@ def _get_booking_agent():
             output_type=BookingResponse,
             deps_type=BookingDeps,
             instructions=_AGENT_INSTRUCTIONS,
+            model_settings={"timeout": _AGENT_TIMEOUT_S},
         )
 
         @agent.tool
@@ -408,7 +430,15 @@ def process_agentic(ctx: BookingContext) -> BookingResponse:
     if agent is None:
         return process(ctx)
     try:
-        result = agent.run_sync(_agent_prompt(ctx.extracted), deps=BookingDeps(user_id=ctx.user_id))
+        # INFO-level marker so the demo/defense can confirm in logs that booking
+        # genuinely ran through the Pydantic AI agent (not the deterministic path).
+        logger.info("Booking via Pydantic AI agent (model=%s)", _GEMINI_MODEL)
+        result = agent.run_sync(
+            _agent_prompt(ctx.extracted),
+            deps=BookingDeps(user_id=ctx.user_id),
+            model_settings={"timeout": _AGENT_TIMEOUT_S},
+            usage_limits=UsageLimits(request_limit=_AGENT_REQUEST_LIMIT),
+        )
         resp = result.output
         if resp.status == "booked":
             resp.status = "alternatives" if resp.alternatives else "needs_info"

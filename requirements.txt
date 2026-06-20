@@ -1,0 +1,20 @@
+# Deploy manifest for Streamlit Community Cloud (auto-detected at repo root).
+# Pinned to the versions verified in .venv so the Cloud resolver can't drift.
+# `project/requirements.txt` stays the looser dev manifest (owned by Chanupa).
+#
+# onnxruntime is pinned explicitly: ChromaDB's local DefaultEmbeddingFunction
+# (the RAG embedding backend) needs it, and recent chromadb no longer pulls it
+# in automatically. Without it, RAG retrieval silently returns [] on Cloud.
+
+streamlit==1.58.0
+streamlit-geolocation==0.0.10
+crewai==1.9.3
+chromadb==1.1.1
+onnxruntime==1.27.0
+pydantic==2.11.10
+pydantic-ai==0.4.3
+google-generativeai==0.8.6
+bcrypt==5.0.0
+python-dotenv==1.1.1
+requests==2.34.2
+gTTS==2.5.4

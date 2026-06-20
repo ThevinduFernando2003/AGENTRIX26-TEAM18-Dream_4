@@ -11,6 +11,7 @@ panel via a ``route_request`` session signal.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -25,6 +26,43 @@ from dotenv import load_dotenv
 load_dotenv(_ROOT / "project" / ".env")
 load_dotenv(_ROOT / ".env")  # fallback
 
+
+# --- Streamlit Community Cloud secrets bridge ------------------------------
+# On Cloud there is no .env file; configuration is supplied via st.secrets.
+# Every agent reads config from os.environ (e.g. os.environ.get("GEMINI_API_KEY")),
+# so copy the relevant secrets across BEFORE importing any project module that
+# reads the environment at import time. Local .env values already present in
+# os.environ take precedence, so this is a no-op for local development.
+_SECRET_KEYS = (
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "RAG_EMBED_BACKEND",
+    "GEMINI_EMBED_MODEL",
+    "NTFY_TOPIC_PREFIX",
+    "NTFY_BASE",
+    "CREWAI_TRACING_ENABLED",
+    "OTEL_SDK_DISABLED",
+)
+
+
+def _bridge_secrets_to_env() -> None:
+    try:
+        secrets = st.secrets
+    except Exception:
+        return  # no secrets.toml configured (local dev) — nothing to bridge
+    for key in _SECRET_KEYS:
+        if key in os.environ:
+            continue
+        try:
+            val = secrets[key]
+        except Exception:
+            continue
+        if val is not None:
+            os.environ[key] = str(val)
+
+
+_bridge_secrets_to_env()
+
 from project.db.db import init_db  # noqa: E402
 from project.ui import common  # noqa: E402
 from project.ui.auth import render_auth_gate  # noqa: E402
@@ -32,6 +70,7 @@ from project.ui.panels import (  # noqa: E402
     booking,
     chat,
     emergency,
+    history,
     medicine,
     prescription,
     report,
@@ -73,6 +112,9 @@ def main() -> None:
     medicine.render(user)
     report.render(user)
     prescription.render(user)
+
+    # Read-only cross-domain activity timeline (collapsed by default).
+    history.render(user)
 
     # Chat history + voice input + intent router.
     chat.render(user)
