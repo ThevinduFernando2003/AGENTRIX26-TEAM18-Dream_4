@@ -14,7 +14,7 @@ import logging
 from datetime import date, timedelta
 from pathlib import Path
 
-from passlib.context import CryptContext
+import bcrypt
 
 from .db import get_conn
 
@@ -22,7 +22,11 @@ logger = logging.getLogger("medbridge.seed")
 logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
 
 _KB = Path(__file__).resolve().parent.parent / "kb"
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_pw(plain: str) -> str:
+    # bcrypt has a 72-byte input limit; truncate defensively.
+    return bcrypt.hashpw(plain.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
 
 
 def _load(name: str) -> dict:
@@ -49,7 +53,7 @@ def _seed_users() -> None:
                VALUES(?,?,?,?,?,?,?,?)""",
             (
                 u["username"],
-                _pwd.hash(u["password"]),
+                _hash_pw(u["password"]),
                 u.get("full_name"),
                 u.get("age"),
                 u.get("gender"),

@@ -1,6 +1,6 @@
 """Gemini speech-to-text wrapper.
 
-Sends an inline audio part to `gemini-1.5-flash` and asks for a
+Sends an inline audio part to `gemini-2.5-flash` and asks for a
 verbatim transcription in the speaker's language. Honest empty-string
 fallback when GEMINI_API_KEY is absent — the UI then shows a "voice
 input unavailable" message.
@@ -33,7 +33,7 @@ def transcribe(audio_bytes: bytes, lang: str = "en", mime: str = "audio/wav") ->
     try:
         import google.generativeai as genai  # type: ignore
         genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        model = genai.GenerativeModel(os.environ.get("GEMINI_MODEL", "gemini-1.5-flash"))
+        model = genai.GenerativeModel(os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"))
         audio_part = {"mime_type": mime, "data": audio_bytes}
         resp = model.generate_content([audio_part, prompt])
         return (getattr(resp, "text", "") or "").strip()

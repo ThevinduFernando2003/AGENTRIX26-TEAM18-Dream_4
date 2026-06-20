@@ -28,7 +28,7 @@ from ..models import ConsensusReport, SpecialistOpinion
 
 logger = logging.getLogger("medbridge.moderator")
 
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 DEFAULT_DISCLAIMER = (

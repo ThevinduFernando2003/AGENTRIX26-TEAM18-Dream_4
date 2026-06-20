@@ -180,5 +180,5 @@ def translate_dynamic(text: str, lang: str) -> str:
         return text
     if not os.environ.get("GEMINI_API_KEY"):
         return text
-    model_id = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+    model_id = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     return _translate_cached(text, lang, model_id)

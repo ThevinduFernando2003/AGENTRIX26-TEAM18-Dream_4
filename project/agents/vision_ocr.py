@@ -1,6 +1,6 @@
 """Gemini Vision OCR helper — prescription transcription only.
 
-Free-tier `gemini-1.5-flash` supports image input. Returns the
+Free-tier `gemini-2.5-flash` supports image input. Returns the
 transcription as plain text. Never paraphrases, never invents dosage —
 the prompt asks for an exact transcription, and the caller is expected
 to show the result back to the user for explicit confirmation before
@@ -19,7 +19,7 @@ from typing import Optional
 
 logger = logging.getLogger("medbridge.vision")
 
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 _PROMPT = (
     "Transcribe this prescription exactly as written. "

@@ -4,13 +4,22 @@ from __future__ import annotations
 
 from typing import Optional
 
+import bcrypt
 import streamlit as st
-from passlib.context import CryptContext
 
 from ..db.db import get_conn
 from ..i18n.translate import t
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_pw(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode("utf-8")[:72], bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_pw(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8")[:72], hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def signup(
@@ -38,7 +47,7 @@ def signup(
            VALUES(?,?,?,?,?,?,?,?)""",
         (
             username,
-            _pwd.hash(password),
+            _hash_pw(password),
             full_name or None,
             age,
             gender or None,
@@ -58,7 +67,7 @@ def login(username: str, password: str) -> Optional[int]:
     ).fetchone()
     if not row:
         return None
-    if not _pwd.verify(password, row["password_hash"]):
+    if not _verify_pw(password, row["password_hash"]):
         return None
     return int(row["user_id"])
 

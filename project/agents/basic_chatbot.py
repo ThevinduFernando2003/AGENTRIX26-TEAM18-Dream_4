@@ -29,7 +29,7 @@ from . import emergency
 
 logger = logging.getLogger("medbridge.chatbot")
 
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 # ---------- persistence helpers ----------
