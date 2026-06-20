@@ -25,6 +25,7 @@ from typing import Optional
 from ..db.db import get_conn
 from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
+from ..rag import retrieve
 from . import emergency
 
 logger = logging.getLogger("medbridge.chatbot")
@@ -206,6 +207,31 @@ def _heuristic_route(text: str) -> dict:
     }
 
 
+# ---------- RAG grounding (symptom → specialty navigation) ----------
+
+# Minimum cosine similarity before we trust a retrieved specialty. The curated
+# notes are short and asymmetric to a patient's phrasing, so scores run modest;
+# 0.2 cleanly separates on-topic symptom text from unrelated chatter in testing.
+_SPECIALTY_MIN_SCORE = 0.2
+
+
+def ground_specialty(text: str) -> Optional[str]:
+    """Map a free-text symptom description to a specialty via the RAG index.
+
+    This is navigation, NOT diagnosis — it answers "which kind of doctor", never
+    "what disease". Returns the specialty name, or None when nothing is confidently
+    relevant or the index isn't available (offline-safe: retrieve() returns []).
+    """
+    hits = retrieve(text, "symptoms", k=3)
+    if not hits:
+        return None
+    top = hits[0]
+    if top["score"] < _SPECIALTY_MIN_SCORE:
+        return None
+    specialty = (top.get("metadata") or {}).get("specialty")
+    return specialty or None
+
+
 # ---------- future-visit reminder detection (Tier 3) ----------
 
 _REM_PATTERNS = [
@@ -351,6 +377,20 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
         out = RouterOutput(**parsed)
     except Exception:
         out = RouterOutput(route="general", reply=parsed.get("reply", "How can I help?"), extracted={})
+
+    # RAG grounding: surface the right specialty from the curated index so we never
+    # invent one. For triage chat we add a gentle navigation suggestion to the reply;
+    # for booking we hand the grounded specialty to the booking agent via `extracted`.
+    if out.route in ("general", "booking"):
+        grounded = ground_specialty(user_text)
+        if grounded:
+            out.extracted.setdefault("specialty", grounded)
+            if out.route == "general":
+                out.reply = (
+                    out.reply.rstrip()
+                    + f" Based on what you describe, a {grounded} doctor may be the most "
+                    "appropriate to see — I can help you book one if you'd like."
+                )
 
     # Tier-3: translate the assistant reply if user prefers Si/Ta.
     final_reply = out.reply
