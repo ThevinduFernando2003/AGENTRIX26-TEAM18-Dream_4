@@ -30,15 +30,24 @@ from dotenv import load_dotenv
 load_dotenv(_ROOT / "project" / ".env")
 load_dotenv(_ROOT / ".env")  # fallback
 
-from project.db.db import init_db  # noqa: E402
+from project.db.db import get_conn, init_db  # noqa: E402
 from project.ui.auth import current_user, logout, render_auth_gate  # noqa: E402
-from project.agents import basic_chatbot, booking_agent, medicine_tracker  # noqa: E402
+from project.agents import (  # noqa: E402
+    basic_chatbot,
+    booking_agent,
+    medicine_tracker,
+    moderator,
+    specialist_panel,
+    vision_ocr,
+)
 from project.notifications.ntfy_client import send as ntfy_send, topic_for_user  # noqa: E402
 
 DISCLAIMER = (
     "_This is an AI-generated observation, not a medical diagnosis. "
     "Please consult a licensed physician or pharmacist._"
 )
+
+_SAMPLE_REPORTS_DIR = _ROOT / "project" / "kb" / "sample_reports"
 
 st.set_page_config(page_title="MedBridge AI", page_icon="🩺", layout="wide")
 
@@ -229,6 +238,221 @@ def _render_pending_booking(user: dict) -> None:
     st.markdown(DISCLAIMER)
 
 
+# ---------- report review panel (Tier 2) ----------
+
+def _list_sample_reports() -> list[Path]:
+    if not _SAMPLE_REPORTS_DIR.exists():
+        return []
+    return sorted(p for p in _SAMPLE_REPORTS_DIR.iterdir() if p.suffix == ".txt")
+
+
+def _render_report_review(user: dict) -> None:
+    expanded = st.session_state.pop("open_report_panel", False)
+    with st.expander("📄 Specialist Panel report review", expanded=expanded):
+        st.caption(
+            "Three independent specialists (cardiology, internal medicine, "
+            "radiology) each read the SAME report without seeing each other's "
+            "output. A moderator then surfaces points of agreement and "
+            "disagreement. Reports are text-only in this build."
+        )
+
+        samples = _list_sample_reports()
+        sample_choice = st.selectbox(
+            "Pick a sample report (or use upload / paste below)",
+            ["— none —"] + [p.name for p in samples],
+            key="rr_sample",
+        )
+
+        uploaded = st.file_uploader(
+            "Or upload a .txt report", type=["txt"], key="rr_upload"
+        )
+
+        pasted = st.text_area(
+            "Or paste report text directly",
+            value="",
+            height=140,
+            key="rr_paste",
+            placeholder="Paste the full report text here…",
+        )
+
+        if st.button("Run Specialist Panel", type="primary", key="rr_run"):
+            text = ""
+            source = ""
+            if sample_choice and sample_choice != "— none —":
+                path = _SAMPLE_REPORTS_DIR / sample_choice
+                text = path.read_text(encoding="utf-8")
+                source = sample_choice
+            elif uploaded is not None:
+                text = uploaded.read().decode("utf-8", errors="replace")
+                source = uploaded.name
+            elif pasted.strip():
+                text = pasted.strip()
+                source = "pasted"
+
+            if not text:
+                st.warning("Provide a report via sample, upload, or paste.")
+            else:
+                conn = get_conn()
+                cur = conn.execute(
+                    "INSERT INTO MedicalReport(user_id, file_url, ocr_text) VALUES(?,?,?)",
+                    (user["user_id"], source, text),
+                )
+                conn.commit()
+                report_id = cur.lastrowid
+
+                with st.spinner("Three specialists reviewing independently…"):
+                    opinions = specialist_panel.run_panel(text, report_id)
+                with st.spinner("Moderator synthesising…"):
+                    consensus = moderator.synthesize(opinions, report_id)
+
+                ntfy_send(
+                    topic=topic_for_user(user["user_id"]),
+                    title="MedBridge AI: report review complete",
+                    message=(
+                        f"Specialist panel review for report #{report_id} ready. "
+                        f"{len(consensus.points_of_disagreement)} point(s) of disagreement."
+                    ),
+                    user_id=user["user_id"],
+                    tags=["clipboard"],
+                    notif_type="report_review_complete",
+                )
+
+                st.session_state["last_panel"] = {
+                    "report_id": report_id,
+                    "opinions": [o.model_dump() for o in opinions],
+                    "consensus": consensus.model_dump(),
+                }
+
+        last = st.session_state.get("last_panel")
+        if last:
+            st.markdown(f"### Specialist opinions — report #{last['report_id']}")
+            cols = st.columns(3)
+            labels = {
+                "cardiology": "🫀 Cardiology",
+                "internal_medicine": "🩺 Internal medicine",
+                "radiology": "🖼️ Radiology",
+            }
+            for col, op in zip(cols, last["opinions"]):
+                with col:
+                    st.markdown(f"**{labels.get(op['specialist_type'], op['specialist_type'])}**")
+                    st.progress(op["confidence"], text=f"Confidence {op['confidence']:.2f}")
+                    st.markdown(op["findings"])
+                    if op.get("flags"):
+                        st.caption("Flags: " + ", ".join(f"`{f}`" for f in op["flags"]))
+
+            st.markdown("### Moderator consensus")
+            cons = last["consensus"]
+            st.markdown(f"**Summary.** {cons['summary']}")
+
+            ca, cd = st.columns(2)
+            with ca:
+                st.markdown("**Points of agreement**")
+                for p in cons["points_of_agreement"]:
+                    st.markdown(f"- {p}")
+            with cd:
+                st.markdown("**Points of disagreement**")
+                disagreement = cons["points_of_disagreement"]
+                # Highlight in warning colour when there IS disagreement.
+                no_disag = (
+                    len(disagreement) == 1
+                    and "no material disagreement" in disagreement[0].lower()
+                )
+                if no_disag:
+                    st.info(disagreement[0])
+                else:
+                    for p in disagreement:
+                        st.warning(p)
+
+            st.caption(cons["disclaimer"])
+
+        st.markdown(DISCLAIMER)
+
+
+# ---------- prescription OCR panel (Tier 2) ----------
+
+def _render_prescription_panel(user: dict) -> None:
+    lat, lng = _get_geo()
+    with st.expander("💊 Prescription photo (OCR + confirm gate)", expanded=False):
+        st.caption(
+            "Upload a prescription photo. Gemini Vision will transcribe it. "
+            "You MUST confirm the transcription is exactly what your "
+            "prescription says before we search any pharmacy. We never "
+            "invent or modify dosage text."
+        )
+
+        if not vision_ocr.is_available():
+            st.warning(
+                "Gemini Vision is unavailable (no GEMINI_API_KEY). "
+                "You can still paste your prescription text below."
+            )
+
+        img = st.file_uploader(
+            "Upload prescription photo (PNG/JPG)",
+            type=["png", "jpg", "jpeg"],
+            key="rx_upload",
+        )
+        if img is not None and st.button("Transcribe with Gemini Vision", key="rx_ocr"):
+            mime = img.type or "image/jpeg"
+            with st.spinner("Running OCR…"):
+                ocr = medicine_tracker.process_prescription(
+                    user_id=user["user_id"],
+                    image_bytes=img.read(),
+                    mime_type=mime,
+                )
+            st.session_state["pending_rx"] = {
+                "prescription_id": ocr.prescription_id,
+                "ocr_text": ocr.ocr_text,
+            }
+
+        pending = st.session_state.get("pending_rx")
+        if pending:
+            st.markdown(
+                "**Is this exactly what's written on your prescription?** "
+                "Edit the text below if anything is wrong, then confirm."
+            )
+            edited = st.text_area(
+                "Transcribed prescription (editable)",
+                value=pending["ocr_text"] or "",
+                height=180,
+                key="rx_edit",
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("✅ Yes — search pharmacies", type="primary", key="rx_yes"):
+                    result = medicine_tracker.confirm_prescription(
+                        prescription_id=pending["prescription_id"],
+                        final_text=edited,
+                        user_id=user["user_id"],
+                        user_lat=lat,
+                        user_lng=lng,
+                    )
+                    ntfy_send(
+                        topic=topic_for_user(user["user_id"]),
+                        title="MedBridge AI: prescription confirmed",
+                        message=(
+                            f"Prescription #{pending['prescription_id']} confirmed. "
+                            f"Pharmacy comparison ready."
+                        ),
+                        user_id=user["user_id"],
+                        tags=["pill"],
+                        notif_type="prescription_confirmed",
+                    )
+                    st.session_state["pending_medicine"] = {
+                        "message": result.message,
+                        "matched_names": result.matched_names,
+                        "unmatched_names": result.unmatched_names,
+                        "quotes": [q.model_dump() for q in result.quotes],
+                    }
+                    st.session_state.pop("pending_rx", None)
+                    st.rerun()
+            with c2:
+                if st.button("❌ Discard and start over", key="rx_no"):
+                    st.session_state.pop("pending_rx", None)
+                    st.rerun()
+
+        st.markdown(DISCLAIMER)
+
+
 # ---------- medicine panel ----------
 
 def _render_pending_medicine() -> None:
@@ -278,6 +502,8 @@ def main() -> None:
     _render_emergency_panel(user)
     _render_pending_booking(user)
     _render_pending_medicine()
+    _render_report_review(user)
+    _render_prescription_panel(user)
 
     # ----- chat history -----
     history = basic_chatbot.load_history(user["user_id"], limit=50)
@@ -330,7 +556,8 @@ def main() -> None:
             st.rerun()
 
         elif result.route == "report_review":
-            st.info("Report review (Specialist Panel + Moderator) is coming in Tier 2.")
+            st.session_state["open_report_panel"] = True
+            st.rerun()
 
     # Footer disclaimer always visible.
     st.markdown("---")

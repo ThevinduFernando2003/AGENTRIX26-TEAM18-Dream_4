@@ -176,10 +176,20 @@ def _heuristic_route(text: str) -> dict:
         return {"route": "booking", "reply": "Let me find an appointment for you.", "extracted": {}}
     if any(k in t for k in ("medicine", "tablet", "pill", "pharmacy", "price")):
         return {"route": "medicine", "reply": "I'll check pharmacy prices for you.", "extracted": {}}
-    if "report" in t or "scan" in t or "x-ray" in t or "ecg" in t:
+    if any(
+        k in t
+        for k in (
+            "report", "scan", "x-ray", "xray", "ecg", "echo",
+            "blood test", "lab result", "mri", "ct scan", "ultrasound",
+            "review my", "second opinion",
+        )
+    ):
         return {
             "route": "report_review",
-            "reply": "Report review by a specialist panel is coming in the next build.",
+            "reply": (
+                "I'll open the Specialist Panel. Upload the report text or pick "
+                "a sample, and three independent specialists will weigh in."
+            ),
             "extracted": {},
         }
     return {

@@ -1,0 +1,34 @@
+SEED SAMPLE REPORT — not a real patient record. Used for MedBridge AI demo only.
+
+Patient: Mr. K. P. (47M)
+Date: 2026-06-15
+Facility: Asiri Central Hospital, Colombo
+
+Presenting complaint:
+Episodic central chest discomfort over the past 3 weeks, lasting 5-10 minutes,
+mostly on exertion (walking uphill, climbing stairs). Relieved by rest. Two
+episodes also at rest, including one waking him from sleep. Mild diaphoresis
+during the worst episode. No haemoptysis. No prior cardiac history.
+
+Risk factors:
+- BMI 29
+- Father had MI at age 55
+- Type 2 diabetes (HbA1c 7.4)
+- Current smoker, 10 cigarettes/day for 20 years
+- BP at presentation 148/92
+
+Investigations:
+- ECG: sinus rhythm, rate 78, no acute ST changes. Q waves in III and aVF —
+  could be old, no prior ECG available.
+- Troponin I (high-sensitivity): 14 ng/L (URL 19). Repeat at 3h: 17 ng/L.
+- CXR: clear lung fields, normal cardiac silhouette.
+- Lipid panel: LDL 162, HDL 36, TG 220.
+
+Examination:
+Heart sounds normal, no murmurs. Lungs clear. No peripheral oedema.
+Calf veins not engorged.
+
+Plan as documented by attending:
+Arrange exercise stress test or CT coronary angiography. Start aspirin 75mg,
+atorvastatin 40mg, and a short-acting nitrate PRN. Lifestyle advice given.
+Follow up in cardiology clinic.

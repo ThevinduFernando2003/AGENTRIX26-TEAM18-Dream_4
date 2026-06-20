@@ -17,7 +17,7 @@ data**, labelled in the UI and the seed files.
 
 ---
 
-## Tier 1 scope (this build)
+## Tier 1 scope
 - Signup / login (bcrypt-hashed passwords)
 - Basic Agent Chatbot with persistent chat history (CrewAI + Gemini)
 - Rule-based emergency screener (runs **before** any LLM call)
@@ -26,9 +26,26 @@ data**, labelled in the UI and the seed files.
 - Medicine Tracker (text-input) — pharmacy comparison by total cost
   and distance (live browser geolocation, manual entry fallback)
 
-Tier 2 (Specialist Panel + Moderator, prescription OCR) and Tier 3
-(voice, i18n, future-visit reminders) are deliberately out of scope
-for this build.
+## Tier 2 scope
+- **Specialist Panel** — three CrewAI agents (cardiology, internal
+  medicine, radiology) read the SAME report **independently**. Each
+  builds its own `LLM`/`Agent`/`Crew` and runs in a separate thread —
+  there is no shared state, by construction.
+- **Moderator Agent** — synthesises the three opinions into a
+  `ConsensusReport`. `points_of_disagreement` is **never silently
+  empty** — a code-level guard in `agents/moderator.py:_ensure_invariants`
+  injects "No material disagreement among the panel." rather than
+  leaving the field blank.
+- **Prescription OCR + confirmation gate** — Gemini Vision transcribes
+  a prescription photo, the user **must** confirm the editable text
+  before any pharmacy lookup runs. Falls back gracefully to a
+  text-paste path when `GEMINI_API_KEY` is absent.
+- Two new ntfy notification types wired in:
+  `report_review_complete` (panel ready) and
+  `prescription_confirmed` (after the user OKs OCR).
+
+Tier 3 (voice, full Sinhala/Tamil UI strings, future-visit reminder
+scheduling) is deliberately out of scope for this build.
 
 ---
 
@@ -95,6 +112,29 @@ After `streamlit run`:
    pharmacy comparison with totals and distance.
 7. Refresh the page; the chat history reloads from SQLite.
 
+### Tier-2 demo additions
+
+8. Chat: `"Can you review my ECG report?"` → chatbot routes to
+   `report_review` and the **📄 Specialist Panel** expander opens.
+9. Pick `report_ambiguous_findings.txt` from the sample dropdown,
+   click **Run Specialist Panel**. Three columns render with
+   independent findings, varying confidence bars, and concern flags.
+   Below them the **Moderator** lists points of agreement and
+   disagreement — disagreement entries are rendered as warnings so
+   they aren't smoothed visually either.
+10. A `report_review_complete` ntfy push arrives on your subscribed
+    topic.
+11. Open the **💊 Prescription photo** expander, upload a JPG/PNG of
+    a prescription. Gemini Vision transcribes it; the text appears
+    in an editable text area with the question
+    *"Is this exactly what's written on your prescription?"*. Only
+    after **✅ Yes — search pharmacies** does the pharmacy comparison
+    run. SQLite shows `Prescription.user_confirmed = 1`.
+12. Without `GEMINI_API_KEY`, the prescription expander shows an
+    honest "Gemini Vision unavailable" warning and the panel-review
+    flow falls back to deterministic stub opinions. The disagreement
+    guard still fires.
+
 ---
 
 ## Folder layout
@@ -104,8 +144,11 @@ project/
 ├── agents/
 │   ├── basic_chatbot.py     # CrewAI orchestrator + memory
 │   ├── booking_agent.py     # Pydantic-typed booking with alternatives
-│   ├── medicine_tracker.py  # Text-input pharmacy comparison
-│   └── emergency.py         # Pure-regex screen — no LLM
+│   ├── medicine_tracker.py  # Text-input + OCR-confirm pharmacy comparison
+│   ├── emergency.py         # Pure-regex screen — no LLM
+│   ├── specialist_panel.py  # 3 independent CrewAI specialists (Tier 2)
+│   ├── moderator.py         # Consensus + structural disagreement guard
+│   └── vision_ocr.py        # Gemini Vision prescription OCR helper
 ├── db/
 │   ├── schema.sql           # 17 tables
 │   ├── db.py                # get_conn(), init_db()

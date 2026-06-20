@@ -18,8 +18,10 @@ from ..db.db import get_conn
 from ..models import (
     MedicinePriceItem,
     MedicineQuoteResult,
+    OcrConfirmation,
     PharmacyQuote,
 )
+from . import vision_ocr
 
 logger = logging.getLogger("medbridge.medicine")
 
@@ -249,3 +251,67 @@ def process(ctx: MedicineContext) -> MedicineQuoteResult:
         quotes=quotes,
         message="Sorted by total cost; distance shown for each pharmacy.",
     )
+
+
+# ---------- prescription OCR flow (Tier 2) ----------
+
+def process_prescription(
+    user_id: int,
+    image_bytes: bytes,
+    mime_type: str = "image/jpeg",
+) -> OcrConfirmation:
+    """Run OCR, persist as unconfirmed, return the extracted text.
+
+    The caller MUST present the returned text back to the user for
+    explicit confirmation before calling `confirm_prescription`. No
+    pharmacy lookup is performed here.
+    """
+    ocr_text = vision_ocr.extract_prescription_text(image_bytes, mime_type=mime_type)
+    conn = get_conn()
+    cur = conn.execute(
+        """INSERT INTO Prescription(user_id, input_type, ocr_text, user_confirmed)
+           VALUES(?,?,?,0)""",
+        (user_id, "photo", ocr_text),
+    )
+    conn.commit()
+    return OcrConfirmation(
+        prescription_id=cur.lastrowid,
+        ocr_text=ocr_text,
+        confirmed=False,
+    )
+
+
+def confirm_prescription(
+    prescription_id: int,
+    final_text: str,
+    user_id: int,
+    user_lat: Optional[float] = None,
+    user_lng: Optional[float] = None,
+) -> MedicineQuoteResult:
+    """User has approved/edited the OCR text. Persist + run pharmacy search."""
+    final_text = (final_text or "").strip()
+    conn = get_conn()
+    conn.execute(
+        "UPDATE Prescription SET ocr_text = ?, user_confirmed = 1 WHERE prescription_id = ?",
+        (final_text, prescription_id),
+    )
+    conn.commit()
+
+    return process(MedicineContext(
+        user_id=user_id,
+        raw_text=final_text,
+        user_lat=user_lat,
+        user_lng=user_lng,
+    ))
+
+
+def record_text_prescription(user_id: int, text: str) -> int:
+    """Text-paste path when vision is unavailable. Auto-confirmed."""
+    conn = get_conn()
+    cur = conn.execute(
+        """INSERT INTO Prescription(user_id, input_type, ocr_text, user_confirmed)
+           VALUES(?,?,?,1)""",
+        (user_id, "text", text or ""),
+    )
+    conn.commit()
+    return cur.lastrowid
