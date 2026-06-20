@@ -1,0 +1,90 @@
+{
+  "_note": "SEED DATA — not live. Prices in LKR. Varied across pharmacies so comparison is meaningful.",
+  "pharmacies": [
+    {
+      "name": "Union Chemists",
+      "address": "Union Place, Colombo 2",
+      "lat": 6.9220, "lng": 79.8580,
+      "prices": {
+        "Paracetamol 500mg":  {"price": 8,    "in_stock": true},
+        "Panadol 500mg":      {"price": 12,   "in_stock": true},
+        "Amoxicillin 500mg":  {"price": 22,   "in_stock": true},
+        "Metformin 500mg":    {"price": 6,    "in_stock": true},
+        "Atorvastatin 10mg":  {"price": 15,   "in_stock": true},
+        "Losartan 50mg":      {"price": 18,   "in_stock": false},
+        "Omeprazole 20mg":    {"price": 14,   "in_stock": true},
+        "Cetirizine 10mg":    {"price": 5,    "in_stock": true},
+        "Salbutamol Inhaler": {"price": 950,  "in_stock": true},
+        "Vitamin D3 1000IU":  {"price": 25,   "in_stock": true}
+      }
+    },
+    {
+      "name": "Healthguard Pharmacy",
+      "address": "Liberty Plaza, Colombo 3",
+      "lat": 6.9080, "lng": 79.8540,
+      "prices": {
+        "Paracetamol 500mg":  {"price": 10,   "in_stock": true},
+        "Panadol 500mg":      {"price": 14,   "in_stock": true},
+        "Amoxicillin 500mg":  {"price": 20,   "in_stock": true},
+        "Metformin 500mg":    {"price": 7,    "in_stock": true},
+        "Atorvastatin 10mg":  {"price": 14,   "in_stock": true},
+        "Losartan 50mg":      {"price": 16,   "in_stock": true},
+        "Omeprazole 20mg":    {"price": 13,   "in_stock": true},
+        "Cetirizine 10mg":    {"price": 6,    "in_stock": true},
+        "Salbutamol Inhaler": {"price": 990,  "in_stock": false},
+        "Vitamin D3 1000IU":  {"price": 28,   "in_stock": true}
+      }
+    },
+    {
+      "name": "Osu Sala (Govt.)",
+      "address": "National Hospital, Colombo 10",
+      "lat": 6.9170, "lng": 79.8620,
+      "prices": {
+        "Paracetamol 500mg":  {"price": 4,    "in_stock": true},
+        "Panadol 500mg":      {"price": 9,    "in_stock": true},
+        "Amoxicillin 500mg":  {"price": 16,   "in_stock": true},
+        "Metformin 500mg":    {"price": 4,    "in_stock": true},
+        "Atorvastatin 10mg":  {"price": 11,   "in_stock": true},
+        "Losartan 50mg":      {"price": 12,   "in_stock": true},
+        "Omeprazole 20mg":    {"price": 10,   "in_stock": true},
+        "Cetirizine 10mg":    {"price": 4,    "in_stock": false},
+        "Salbutamol Inhaler": {"price": 800,  "in_stock": true},
+        "Vitamin D3 1000IU":  {"price": 18,   "in_stock": true}
+      }
+    },
+    {
+      "name": "Lanka Hospitals Pharmacy",
+      "address": "Elvitigala Mawatha, Colombo 5",
+      "lat": 6.8870, "lng": 79.8770,
+      "prices": {
+        "Paracetamol 500mg":  {"price": 11,   "in_stock": true},
+        "Panadol 500mg":      {"price": 15,   "in_stock": true},
+        "Amoxicillin 500mg":  {"price": 24,   "in_stock": false},
+        "Metformin 500mg":    {"price": 8,    "in_stock": true},
+        "Atorvastatin 10mg":  {"price": 16,   "in_stock": true},
+        "Losartan 50mg":      {"price": 20,   "in_stock": true},
+        "Omeprazole 20mg":    {"price": 15,   "in_stock": true},
+        "Cetirizine 10mg":    {"price": 7,    "in_stock": true},
+        "Salbutamol Inhaler": {"price": 1050, "in_stock": true},
+        "Vitamin D3 1000IU":  {"price": 30,   "in_stock": true}
+      }
+    },
+    {
+      "name": "City Pharmacy Kollupitiya",
+      "address": "Galle Road, Colombo 3",
+      "lat": 6.9020, "lng": 79.8510,
+      "prices": {
+        "Paracetamol 500mg":  {"price": 9,    "in_stock": true},
+        "Panadol 500mg":      {"price": 13,   "in_stock": true},
+        "Amoxicillin 500mg":  {"price": 21,   "in_stock": true},
+        "Metformin 500mg":    {"price": 6,    "in_stock": false},
+        "Atorvastatin 10mg":  {"price": 13,   "in_stock": true},
+        "Losartan 50mg":      {"price": 17,   "in_stock": true},
+        "Omeprazole 20mg":    {"price": 12,   "in_stock": true},
+        "Cetirizine 10mg":    {"price": 5,    "in_stock": true},
+        "Salbutamol Inhaler": {"price": 920,  "in_stock": true},
+        "Vitamin D3 1000IU":  {"price": 22,   "in_stock": true}
+      }
+    }
+  ]
+}

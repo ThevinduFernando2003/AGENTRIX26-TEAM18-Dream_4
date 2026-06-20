@@ -1,0 +1,15 @@
+{
+  "_note": "SEED DATA — not live. reference_dosage_text is displayed verbatim; the AI never invents dosage.",
+  "medicines": [
+    {"name": "Paracetamol 500mg",     "reference_dosage_text": "1 tablet every 6 hours as needed for pain or fever. Max 4 per day."},
+    {"name": "Panadol 500mg",         "reference_dosage_text": "1 tablet every 6 hours as needed for pain or fever. Max 4 per day."},
+    {"name": "Amoxicillin 500mg",     "reference_dosage_text": "1 capsule three times a day for 7 days. Finish the full course."},
+    {"name": "Metformin 500mg",       "reference_dosage_text": "1 tablet twice a day with meals."},
+    {"name": "Atorvastatin 10mg",     "reference_dosage_text": "1 tablet at night."},
+    {"name": "Losartan 50mg",         "reference_dosage_text": "1 tablet once a day in the morning."},
+    {"name": "Omeprazole 20mg",       "reference_dosage_text": "1 capsule before breakfast for 14 days."},
+    {"name": "Cetirizine 10mg",       "reference_dosage_text": "1 tablet at night for allergies."},
+    {"name": "Salbutamol Inhaler",    "reference_dosage_text": "2 puffs when wheezing. Up to 4 times a day."},
+    {"name": "Vitamin D3 1000IU",     "reference_dosage_text": "1 tablet daily with food."}
+  ]
+}
