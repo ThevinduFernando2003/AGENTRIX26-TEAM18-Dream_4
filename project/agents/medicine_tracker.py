@@ -21,9 +21,37 @@ from ..models import (
     OcrConfirmation,
     PharmacyQuote,
 )
+from ..rag import retrieve
 from . import vision_ocr
 
 logger = logging.getLogger("medbridge.medicine")
+
+# RAG resolution thresholds. A small embedding model rates *any* drug-like token as
+# similar to *every* catalog drug, so cosine score alone gives false positives
+# (e.g. "aspirin"→"Atorvastatin"). We require BOTH a minimum cosine score AND a
+# character-level closeness to the resolved name's primary token, so only genuine
+# spelling variants ("parasetmol"→"Paracetamol") pass — semantic recall, edit-distance precision.
+_MED_RAG_MIN_SCORE = 0.3
+_MED_NAME_CHAR_RATIO = 0.6
+
+
+def _rag_resolve_medicine(raw: str) -> Optional[str]:
+    """Resolve a misspelled name to a catalog name via the RAG index.
+
+    Offline-safe: retrieve() returns [] without an index, so this returns None and
+    the caller keeps the existing substring/difflib behaviour.
+    """
+    hits = retrieve(raw, "medicines", k=1)
+    if not hits or hits[0]["score"] < _MED_RAG_MIN_SCORE:
+        return None
+    name = (hits[0].get("metadata") or {}).get("name")
+    if not name:
+        return None
+    # Precision guard: reject semantically-similar but different drugs and nonsense.
+    primary = name.split()[0].lower()
+    if difflib.SequenceMatcher(None, raw.strip().lower(), primary).ratio() < _MED_NAME_CHAR_RATIO:
+        return None
+    return name
 
 
 def _all_medicine_names() -> list[tuple[int, str]]:
@@ -52,6 +80,11 @@ def match_medicines(names: list[str]) -> tuple[list[int], list[str], list[str]]:
             if close:
                 ln = close[0]
                 hit = next(((mid, n) for mid, n, x in lower_catalog if x == ln), None)
+        if not hit:
+            # RAG fallback: vector-match misspellings/brands difflib missed.
+            rag_name = _rag_resolve_medicine(raw)
+            if rag_name:
+                hit = next(((mid, n) for mid, n, _ in lower_catalog if n == rag_name), None)
         if hit and hit[0] not in seen_ids:
             matched_ids.append(hit[0])
             matched_names.append(hit[1])
