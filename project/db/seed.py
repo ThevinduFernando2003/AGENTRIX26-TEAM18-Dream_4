@@ -163,6 +163,27 @@ def _seed_pharmacies() -> None:
     conn.commit()
 
 
+def _seed_reminders() -> None:
+    """Give demo1 one near-due future-visit reminder so the Tier-3 push demo
+    fires in a single click. Idempotent: skips if demo1 already has a reminder.
+    ~3 days out lands inside the 7-day `due_within` window.
+    """
+    conn = get_conn()
+    row = conn.execute("SELECT user_id FROM User WHERE username = 'demo1'").fetchone()
+    if not row:
+        return
+    uid = row["user_id"]
+    if conn.execute("SELECT 1 FROM FutureVisitReminder WHERE user_id = ?", (uid,)).fetchone():
+        return
+    conn.execute(
+        """INSERT INTO FutureVisitReminder(user_id, doctor_id, target_date_or_month, notified)
+           VALUES(?, NULL, ?, 0)""",
+        (uid, _resolve_date(3)),  # ~3 days out → inside the 7-day "due" window
+    )
+    conn.commit()
+    logger.info("Seeded a near-due follow-up reminder for demo1 (SEED DATA — not live).")
+
+
 def load_seed_if_empty() -> None:
     conn = get_conn()
     row = conn.execute("SELECT COUNT(*) AS n FROM User").fetchone()
@@ -174,6 +195,7 @@ def load_seed_if_empty() -> None:
     _seed_facilities()
     _seed_medicines()
     _seed_pharmacies()
+    _seed_reminders()
     logger.info("Seed complete.")
 
 
