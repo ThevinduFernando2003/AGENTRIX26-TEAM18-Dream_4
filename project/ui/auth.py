@@ -9,6 +9,7 @@ import streamlit as st
 
 from ..db.db import get_conn
 from ..i18n.translate import t
+from .common import language_short_label, render_auth_rights_banner, render_top_banner
 
 
 def _hash_pw(plain: str) -> str:
@@ -83,6 +84,16 @@ def load_user(user_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def update_preferred_language(user_id: int, lang: str) -> None:
+    """Persist a new preferred_language for the given user."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE User SET preferred_language = ? WHERE user_id = ?",
+        (lang, user_id),
+    )
+    conn.commit()
+
+
 def invalidate_user_cache() -> None:
     """Drop the cached user dict so the next ``current_user()`` reloads from DB.
 
@@ -136,8 +147,7 @@ def render_auth_gate() -> Optional[dict]:
     # the app proper, language flips to the user's choice.
     L = "en"
 
-    st.title(t("auth.title", L))
-    st.caption(t("auth.tagline", L))
+    render_top_banner(L)
 
     tab_login, tab_signup = st.tabs([t("auth.tab.login", L), t("auth.tab.signup", L)])
 
@@ -160,7 +170,12 @@ def render_auth_gate() -> Optional[dict]:
             full_name = st.text_input(t("auth.fullname", L), key="su_name")
             age = st.number_input(t("auth.age", L), min_value=0, max_value=120, value=30, key="su_age")
             gender = st.selectbox(t("auth.gender", L), ["", "M", "F", "Other"], key="su_gender")
-            lang = st.selectbox(t("auth.pref_lang", L), ["en", "si", "ta"], key="su_lang")
+            lang = st.selectbox(
+                t("auth.pref_lang", L),
+                ["en", "si", "ta"],
+                key="su_lang",
+                format_func=language_short_label,
+            )
             fc_name = st.text_input(t("auth.family_name", L), key="su_fcn")
             fc_phone = st.text_input(t("auth.family_phone", L), key="su_fcp")
             if st.form_submit_button(t("auth.signup_btn", L)):
@@ -169,4 +184,5 @@ def render_auth_gate() -> Optional[dict]:
                 )
                 (st.success if ok else st.error)(msg)
 
+    render_auth_rights_banner(L)
     return None
