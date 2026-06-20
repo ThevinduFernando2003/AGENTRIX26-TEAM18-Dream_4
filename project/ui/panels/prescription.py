@@ -10,33 +10,27 @@ import streamlit as st
 
 from ..common import disclaimer, get_geo, lang_of
 from ...agents import medicine_tracker, vision_ocr
+from ...i18n.translate import t
 from ...notifications.ntfy_client import send as ntfy_send, topic_for_user
 
 
 def render(user: dict) -> None:
+    lang = lang_of(user)
     lat, lng = get_geo()
-    with st.expander("💊 Prescription photo (OCR + confirm gate)", expanded=False):
-        st.caption(
-            "Upload a prescription photo. Gemini Vision will transcribe it. "
-            "You MUST confirm the transcription is exactly what your "
-            "prescription says before we search any pharmacy. We never "
-            "invent or modify dosage text."
-        )
+    with st.expander(t("panel.rx.expander", lang), expanded=False):
+        st.caption(t("panel.rx.caption", lang))
 
         if not vision_ocr.is_available():
-            st.warning(
-                "Gemini Vision is unavailable (no GEMINI_API_KEY). "
-                "You can still paste your prescription text below."
-            )
+            st.warning(t("panel.rx.unavailable", lang))
 
         img = st.file_uploader(
-            "Upload prescription photo (PNG/JPG)",
+            t("panel.rx.upload", lang),
             type=["png", "jpg", "jpeg"],
             key="rx_upload",
         )
-        if img is not None and st.button("Transcribe with Gemini Vision", key="rx_ocr"):
+        if img is not None and st.button(t("panel.rx.transcribe", lang), key="rx_ocr"):
             mime = img.type or "image/jpeg"
-            with st.spinner("Running OCR…"):
+            with st.spinner(t("panel.rx.spinner", lang)):
                 ocr = medicine_tracker.process_prescription(
                     user_id=user["user_id"],
                     image_bytes=img.read(),
@@ -49,19 +43,16 @@ def render(user: dict) -> None:
 
         pending = st.session_state.get("pending_rx")
         if pending:
-            st.markdown(
-                "**Is this exactly what's written on your prescription?** "
-                "Edit the text below if anything is wrong, then confirm."
-            )
+            st.markdown(t("panel.rx.confirm_prompt", lang))
             edited = st.text_area(
-                "Transcribed prescription (editable)",
+                t("panel.rx.edit_label", lang),
                 value=pending["ocr_text"] or "",
                 height=180,
                 key="rx_edit",
             )
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("✅ Yes — search pharmacies", type="primary", key="rx_yes"):
+                if st.button(t("panel.rx.confirm_btn", lang), type="primary", key="rx_yes"):
                     result = medicine_tracker.confirm_prescription(
                         prescription_id=pending["prescription_id"],
                         final_text=edited,
@@ -89,8 +80,8 @@ def render(user: dict) -> None:
                     st.session_state.pop("pending_rx", None)
                     st.rerun()
             with c2:
-                if st.button("❌ Discard and start over", key="rx_no"):
+                if st.button(t("panel.rx.discard_btn", lang), key="rx_no"):
                     st.session_state.pop("pending_rx", None)
                     st.rerun()
 
-        st.markdown(disclaimer(lang_of(user)))
+        st.markdown(disclaimer(lang))
