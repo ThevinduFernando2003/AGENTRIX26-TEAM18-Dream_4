@@ -96,9 +96,22 @@ def current_user() -> Optional[dict]:
     return u
 
 
+# Process-scoped session keys that must survive logout (not user-scoped).
+# `_db_inited` controls whether init_db() has run for this Streamlit
+# process; clearing it would re-seed on every logout.
+_PROCESS_SCOPED_KEYS = {"_db_inited"}
+
+
 def logout() -> None:
-    for k in ("user_id", "user_cache", "geo", "manual_geo"):
-        st.session_state.pop(k, None)
+    """Wipe every user-scoped key in session_state on logout.
+
+    Whitelist-based: clears everything except keys in
+    _PROCESS_SCOPED_KEYS. New panels/toggles added by teammates are
+    cleared automatically — no maintenance burden on each addition.
+    """
+    for k in list(st.session_state.keys()):
+        if k not in _PROCESS_SCOPED_KEYS:
+            del st.session_state[k]
 
 
 def render_auth_gate() -> Optional[dict]:
