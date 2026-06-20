@@ -23,6 +23,9 @@ def render(user: dict) -> None:
 
     # ----- chat history -----
     history = basic_chatbot.load_history(user["user_id"], limit=50)
+    if not history:
+        # Friendly empty state so a first-time user knows what to try.
+        st.info(t("chat.quickstart", lang))
     for h in history:
         with st.chat_message(h["role"] if h["role"] in ("user", "assistant") else "assistant"):
             st.markdown(h["content"])
@@ -34,7 +37,8 @@ def render(user: dict) -> None:
         audio = st.audio_input("🎙️", key="voice_in")
         if audio is not None and st.button(t("chat.voice_transcribe", lang), key="voice_send"):
             mime = getattr(audio, "type", None) or "audio/wav"
-            transcript = stt.transcribe(audio.read(), lang=lang, mime=mime)
+            with st.spinner(t("chat.voice_transcribing", lang)):
+                transcript = stt.transcribe(audio.read(), lang=lang, mime=mime)
             if transcript:
                 st.session_state["_queued_user_text"] = transcript
                 st.rerun()

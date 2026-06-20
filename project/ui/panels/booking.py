@@ -23,9 +23,18 @@ def _consume_route(user: dict) -> None:
     req = st.session_state.get("route_request")
     if not req or req.get("route") != "booking":
         return
-    ctx = booking_agent.BookingContext(user_id=user["user_id"], extracted=req.get("extracted", {}))
-    resp = booking_agent.process_agentic(ctx)
+    ctx = booking_agent.BookingContext(
+        user_id=user["user_id"],
+        extracted=req.get("extracted", {}),
+        raw_text=req.get("raw_text", ""),
+    )
+    lang = lang_of(user)
+    # The Pydantic AI agent can take a few seconds; a spinner keeps the panel from
+    # looking frozen while it searches.
+    with st.spinner(t("panel.booking.searching", lang)):
+        resp = booking_agent.process_agentic(ctx)
     st.session_state["pending_booking"] = {
+        "status": resp.status,
         "message": resp.message,
         "alternatives": [a.model_dump() for a in resp.alternatives],
     }
@@ -57,7 +66,11 @@ def render(user: dict) -> None:
     st.write(translate_dynamic(pb["message"], lang))
 
     if not pb.get("alternatives"):
-        st.info(t("panel.booking.no_alts", lang))
+        # For a "needs_info" result the message above is itself the helpful prompt
+        # ("tell me a doctor or specialty"), so skip the misleading "no slots this
+        # week" warning and only show it when availability genuinely came back empty.
+        if pb.get("status") != "needs_info":
+            st.info(t("panel.booking.no_alts", lang))
         if st.button(t("panel.booking.dismiss", lang), key="booking_dismiss_no_alts"):
             st.session_state.pop("pending_booking", None)
             st.rerun()

@@ -14,7 +14,6 @@ never be omitted by a wonky generation.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -27,6 +26,7 @@ from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
 from ..rag import retrieve
 from . import emergency
+from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.chatbot")
 
@@ -138,22 +138,9 @@ def _run_llm(user_text: str, transcript: str) -> dict | None:
             request_options={"timeout": _LLM_TIMEOUT_S},
         )
         raw = (getattr(resp, "text", "") or "").strip()
-        return _extract_json(raw)
+        return extract_first_json(raw)
     except Exception as exc:
         logger.warning("LLM router call failed (%s) — using heuristic", exc)
-        return None
-
-
-_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
-def _extract_json(raw: str) -> dict | None:
-    m = _JSON_RE.search(raw)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
         return None
 
 

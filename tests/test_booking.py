@@ -33,3 +33,32 @@ def test_book_is_atomic_no_double_book(seeded_db, no_api_key):
     second = b.book(user_id=1, slot_id=slot_id)
     assert first is not None
     assert second is None  # slot already taken → no double-book
+
+
+def test_parse_date_weekday_phrase():
+    # Step 5: "next <weekday>" resolves to the next future occurrence (Sun 2026-06-21).
+    today = datetime.date(2026, 6, 21)
+    assert b.parse_date("next tuesday", today=today) == "2026-06-23"
+    assert b.parse_date("friday", today=today) == "2026-06-26"
+
+
+def test_agent_prompt_includes_raw_text():
+    # Step 5: the verbatim request must reach the LLM prompt.
+    ctx = b.BookingContext(user_id=1, extracted={"specialty": "Cardiology"},
+                           raw_text="book me a heart doctor next tuesday")
+    prompt = b._agent_prompt(ctx)
+    assert "Cardiology" in prompt
+    assert "book me a heart doctor next tuesday" in prompt
+
+
+def test_booking_agent_builds_with_key(monkeypatch):
+    # Proves the Step 3 fix stays fixed: with a key + pydantic-ai present, the agent
+    # actually BUILDS (module-level RunContext import resolves @agent.tool hints).
+    # Build only — run_sync is never called, so there is no network.
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy-key-build-only")
+    b._booking_agent = None
+    try:
+        assert b._PYDANTIC_AI_AVAILABLE
+        assert b._get_booking_agent() is not None
+    finally:
+        b._booking_agent = None  # reset so the offline tests still observe None

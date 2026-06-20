@@ -1,8 +1,15 @@
 # MedBridge AI — Phase 3 Handoff (continue on another device)
 
-This document hands off Phase 3 mid-flight. **Steps 1–4 are done and verified.
-Steps 5–10 remain.** It is written so a different developer (or a fresh Claude
-session) on a different machine can pick up cold and finish.
+This document handed off Phase 3 mid-flight. **All steps (1–10) are now complete
+and verified** — the remaining work (Steps 5–10) was finished on the
+`phase3-steps5-10` branch (cut from `Test`). It is kept here as the execution
+record.
+
+> **Step 0 (unplanned blocker, fixed first):** the `Test` branch was missing
+> `project/rag/__init__.py` and the `medicine`/`prescription`/`__init__` panels —
+> the PR#5 revert (`147bb0d`) had dropped them, so the app wouldn't boot and
+> pytest had collection errors. These were restored from `nisal` (imports are
+> compatible with Test's single-file `project/models.py`) before Steps 5–10.
 
 > Decisions locked for this phase (do not re-litigate):
 > - **Host:** Streamlit Community Cloud (full-AI: a rotated/billed `GEMINI_API_KEY`
@@ -17,16 +24,17 @@ session) on a different machine can pick up cold and finish.
 
 | Step | Title | State |
 |---|---|---|
+| 0 | Restore files dropped by the PR#5 revert (`rag/__init__`, medicine/prescription panels) | ✅ done |
 | 1 | Deploy scaffold (root `requirements.txt`, secrets bridge, `.gitignore`, `DEPLOY.md`) | ✅ done |
 | 2 | Routing latency fix (heuristic-first + direct Gemini JSON + 8s timeout + chat spinner) | ✅ done |
 | 3 | Pydantic AI booking agent fix (module-level imports + bounded timeout) | ✅ done |
 | 4 | History/Timeline panel + i18n strings | ✅ done |
-| 5 | Reminders demo seed + booking panel UX (+ `raw_text` passthrough to agent) | ⬜ TODO |
-| 6 | Prescription OCR sample image + voice (STT/TTS) hardening | ⬜ TODO |
-| 7 | i18n completeness + JSON regex tightening + demo seed review | ⬜ TODO |
-| 8 | Tests across all four lanes → one green `pytest` | ⬜ TODO |
-| 9 | UI polish pass (theme + layout) | ⬜ TODO |
-| 10 | Final E2E + deploy verify | ⬜ TODO |
+| 5 | Reminders demo seed + booking panel UX (+ `raw_text` passthrough to agent) | ✅ done |
+| 6 | Prescription OCR sample image + voice (STT/TTS) hardening | ✅ done |
+| 7 | i18n completeness + JSON regex tightening + demo seed review | ✅ done |
+| 8 | Tests across all four lanes → one green `pytest` (52 passed) | ✅ done |
+| 9 | UI polish pass (theme + layout) | ✅ done |
+| 10 | Final E2E + deploy verify (manifest pinned to verified env; bcrypt 4.0.1) | ✅ done |
 
 The full original plan lives in [PLAN1.md](PLAN1.md) (Phase 3 section). This file
 supersedes it for execution detail.

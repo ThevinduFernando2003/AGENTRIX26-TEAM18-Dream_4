@@ -21,17 +21,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
 from ..db.db import get_conn
 from ..models import SPECIALIST, SpecialistOpinion
+from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.panel")
 
 _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
 _PERSONAS: dict[SPECIALIST, dict[str, str]] = {
@@ -85,16 +83,6 @@ _PERSONAS: dict[SPECIALIST, dict[str, str]] = {
 }
 
 
-def _extract_json(raw: str) -> Optional[dict]:
-    m = _JSON_RE.search(raw)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
-
-
 def _run_one(specialty: SPECIALIST, report_text: str) -> SpecialistOpinion:
     """Build a fresh Crew per call. No shared state with other specialists."""
     persona = _PERSONAS[specialty]
@@ -146,7 +134,7 @@ def _run_one(specialty: SPECIALIST, report_text: str) -> SpecialistOpinion:
         )
         crew = Crew(agents=[agent], tasks=[task], verbose=False)
         result = str(crew.kickoff())
-        parsed = _extract_json(result)
+        parsed = extract_first_json(result)
         if parsed is None:
             raise ValueError(f"could not parse JSON from {specialty} output")
         # Force the specialty field — the LLM occasionally relabels.
