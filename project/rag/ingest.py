@@ -18,6 +18,7 @@ Gemini ``text-embedding-004`` when ``GEMINI_API_KEY`` is set).
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -40,15 +41,16 @@ ALL_COLLECTIONS = (SYMPTOMS, FACILITIES, MEDICINES)
 
 
 def _doc_id(collection: str, text: str) -> str:
-    return hashlib.sha1(f"{collection}::{text}".encode("utf-8")).hexdigest()
+    return hashlib.sha1(f"{collection}::{text}".encode()).hexdigest()
 
 
 def _load_json(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 # ---------- document builders (text + metadata per chunk) ----------
+
 
 def _symptom_docs() -> list[tuple[str, dict]]:
     docs: list[tuple[str, dict]] = []
@@ -76,7 +78,10 @@ def _facility_docs() -> list[tuple[str, dict]]:
                 f"{fac['name']} ({fac.get('type', '')}), {fac.get('address', '')}."
             ).strip()
             docs.append(
-                (text, {"specialty": doc["specialty"], "facility": fac["name"], "doctor": doc["name"]})
+                (
+                    text,
+                    {"specialty": doc["specialty"], "facility": fac["name"], "doctor": doc["name"]},
+                )
             )
     return docs
 
@@ -110,10 +115,8 @@ def ingest() -> dict[str, int]:
         # Rebuild in cosine space so `score = 1 - distance` is a real cosine
         # similarity. (Chroma defaults to L2, which makes scores uncomparable.)
         # Delete-then-create keeps re-ingest idempotent with no duplicate vectors.
-        try:
+        with contextlib.suppress(Exception):
             client.delete_collection(name=name)
-        except Exception:
-            pass
         collection = client.create_collection(
             name=name, embedding_function=embed_fn, metadata={"hnsw:space": "cosine"}
         )

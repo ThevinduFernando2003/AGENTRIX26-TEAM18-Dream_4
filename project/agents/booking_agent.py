@@ -24,8 +24,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import date as dtdate, datetime, timedelta
-from typing import Optional
+from datetime import date as dtdate
+from datetime import datetime, timedelta
 
 from ..db.db import get_conn
 from ..models import (
@@ -41,6 +41,7 @@ _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 # ---------- pure SQL tools ----------
+
 
 def find_doctors(query: str) -> list[dict]:
     """Match on doctor name OR specialty name (case-insensitive contains)."""
@@ -60,7 +61,7 @@ def find_doctors(query: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def find_slot(doctor_id: int, date_str: str, time_str: str) -> Optional[dict]:
+def find_slot(doctor_id: int, date_str: str, time_str: str) -> dict | None:
     conn = get_conn()
     row = conn.execute(
         """SELECT slot_id, doctor_id, date, time, is_available
@@ -71,7 +72,9 @@ def find_slot(doctor_id: int, date_str: str, time_str: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def nearest_alternatives(doctor_id: int, target_dt: datetime, limit: int = 5) -> list[AlternativeSlot]:
+def nearest_alternatives(
+    doctor_id: int, target_dt: datetime, limit: int = 5
+) -> list[AlternativeSlot]:
     """Available slots for the same doctor within ±7 days, sorted by proximity."""
     conn = get_conn()
     lo = (target_dt.date() - timedelta(days=7)).isoformat()
@@ -110,7 +113,7 @@ def nearest_alternatives(doctor_id: int, target_dt: datetime, limit: int = 5) ->
     ]
 
 
-def book(user_id: int, slot_id: int) -> Optional[BookingConfirmation]:
+def book(user_id: int, slot_id: int) -> BookingConfirmation | None:
     """Atomically book a slot. Returns None if the slot is already taken."""
     conn = get_conn()
     try:
@@ -154,7 +157,7 @@ def book(user_id: int, slot_id: int) -> Optional[BookingConfirmation]:
 _TIME_RE = re.compile(r"(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
 
 
-def parse_date(raw: Optional[str], today: Optional[dtdate] = None) -> Optional[str]:
+def parse_date(raw: str | None, today: dtdate | None = None) -> str | None:
     if not raw:
         return None
     today = today or dtdate.today()
@@ -185,7 +188,7 @@ def parse_date(raw: Optional[str], today: Optional[dtdate] = None) -> Optional[s
     return None
 
 
-def parse_time(raw: Optional[str]) -> Optional[str]:
+def parse_time(raw: str | None) -> str | None:
     if not raw:
         return None
     s = raw.strip().lower()
@@ -205,6 +208,7 @@ def parse_time(raw: Optional[str]) -> Optional[str]:
 
 
 # ---------- orchestrator ----------
+
 
 @dataclass
 class BookingContext:
@@ -236,7 +240,9 @@ def process(ctx: BookingContext) -> BookingResponse:
 
     if not date_str or not time_str:
         # Show next 5 available across the matched doctor's calendar.
-        target = datetime.combine(dtdate.today() + timedelta(days=1), datetime.min.time().replace(hour=10))
+        target = datetime.combine(
+            dtdate.today() + timedelta(days=1), datetime.min.time().replace(hour=10)
+        )
         alts = nearest_alternatives(doctor["doctor_id"], target)
         if not alts:
             return BookingResponse(
@@ -296,6 +302,7 @@ def process(ctx: BookingContext) -> BookingResponse:
 @dataclass
 class BookingDeps:
     """Dependencies injected into agent tool calls."""
+
     user_id: int
 
 
@@ -359,8 +366,8 @@ def _get_booking_agent():
         def available_slots(
             ctx: RunContext[BookingDeps],
             doctor_id: int,
-            around_date: Optional[str] = None,
-            around_time: Optional[str] = None,
+            around_date: str | None = None,
+            around_time: str | None = None,
         ) -> list[dict]:
             """Available slots for a doctor within ±7 days of an optional target."""
             d = parse_date(around_date) if around_date else None
