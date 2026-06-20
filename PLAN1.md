@@ -118,63 +118,84 @@ critical bugs, and lay the scaffolding the later phases depend on.
 
 ---
 
-## Phase 3 — Household Chores: Tests, CI, Docker, Lint, Refactor polish
+## Phase 3 — Make Every Flow Work, Fast, with Finished UI
 
-**Goal:** turn it into a "properly made" repo. Each member writes tests **for
-their own lane** (non-overlapping), Chanupa owns the cross-cutting DevOps.
+**Goal:** turn "the code runs" into "the demo works and feels instant." Phase 2
+made RAG + routing real; Phase 3 fixes the two functional defects found in P2
+verification, removes the perceived **"stuck"**, and finishes the UI/UX of every
+flow in the Interim Report. **No new domains** — make the promised ones demo-grade.
+Each member also writes tests **for their own lane** (non-overlapping).
 
-### Janidu
-- Tests: RAG retrieval correctness + ingestion idempotency; chatbot routing; `emergency.screen` (true/false positives).
-- Refactor pass on `app.py`/panels for clarity; ensure panel contract is consistent.
+> **Carry-over from Phase 2 verification — read before starting:**
+> - 🔴 **Perceived "stuck" on booking/medicine is LLM latency, NOT a missing search API.** Search runs on the seeded SQLite and works: booking returns 5 alternative slots, medicine returns 5 pharmacies with price/stock/distance. The chat router goes through CrewAI `crew.kickoff()` (~5 s every message), and on a throttled key litellm retries 429s with backoff → 30–60 s hangs. Fixing routing latency fixes the "stuck."
+> - 🔴 **The Pydantic AI booking agent is dead.** `_get_booking_agent()` raises `name 'RunContext' is not defined` (imported *inside* the function but resolved against module globals under `from __future__ import annotations`), so `process_agentic()` silently falls back to deterministic. The headline "real Pydantic AI" is never actually exercised.
+> - ✅ **Seed/mock data is by design** (offline-capable) and is a demo *strength*. Do **NOT** add external/live pharmacy or doctor APIs — there is nothing to integrate.
 
-### Thevindu
-- Tests: `parse_date` / `parse_time`, `nearest_alternatives` ordering, atomic `book()` (no double-book under retry), Pydantic AI agent typed-output validation, reminder regex (`detect_reminder`).
+### Janidu — routing speed + chat UX + history view
+1. **Kill the latency (the #1 demo blocker).** In `basic_chatbot`, route **heuristic-first** for unambiguous intents (booking/medicine/report verbs) and only call the LLM when the heuristic is uncertain (`route == "general"`). Replace the heavy CrewAI router in `_run_llm` with a single **direct Gemini JSON call** (CrewAI's Agent/Task/Crew overhead is most of the 5 s). Set a hard **request timeout (~8 s) and `num_retries=0`** so a rate-limited key fails fast to the heuristic instead of hanging.
+2. **Chat never looks frozen.** Wrap `basic_chatbot.handle(...)` in `st.spinner(...)`; echo the user's message immediately; disable the input while a turn is in flight.
+3. **Persistent history view (Interim §3.5).** Add a "History / Timeline" panel that reads the user's past chats, appointments, report reviews and medicine searches from the DB into one chronological view (hand new strings to Nisal for si/ta).
+4. Tests: heuristic-first router classification; RAG retrieval correctness + ingest idempotency; `emergency.screen` true/false positives.
 
-### Nisal
-- Tests: medicine `match_medicines`, `haversine_km`, `quotes_for` (totals/missing), OCR-confirm gate (no pharmacy lookup before confirm), i18n catalog completeness (every key has en/si/ta), `translate_dynamic` offline fallback.
+### Thevindu — make the Pydantic AI booking agent real + reminders demo
+1. **Fix `_get_booking_agent`**: move `from pydantic_ai import Agent, RunContext` + the Gemini provider imports to **module level** (guarded `try/except` → `None` for the offline path) so tool annotations resolve. Confirm `process_agentic` actually runs the agent (not the fallback) when a key is present; add `request_timeout` + bounded retries so the AFC tool loop can't hang.
+2. **Prove the agent earns its place**: "book me a heart doctor next Tuesday" should resolve specialty via RAG → real doctor → real slots end-to-end *through the agent*.
+3. **Future-visit reminder demo (Interim §3.3)**: verify `detect_reminder` → `_persist_reminder` → sidebar "Check my reminders" → `reminders.fire` → ntfy push, end-to-end. Seed one near-due reminder so the demo shows a push in one click.
+4. Booking panel UX: `st.spinner` around `process_agentic`/`book`; clear "tell me a doctor or specialty" message when nothing was extracted.
+5. Tests: `parse_date`/`parse_time`, `nearest_alternatives` ordering, atomic `book()` (no double-book under retry), **agent path is taken when keyed** + typed-output validation, `detect_reminder` regex.
 
-### Chanupa (DevOps — the bulk of "household")
-1. **`Dockerfile`** (slim Python base, install reqs, run Streamlit) + **`.dockerignore`** + **`docker-compose.yml`** (app service, volume for `app.db` + Chroma persist dir, `.env` passthrough).
-2. **`.github/workflows/ci.yml`**: matrix lint (`ruff`, `black --check`) + `pytest` on push/PR; optional Docker build step.
-3. **Lint/format enforcement** repo-wide; optional `pre-commit` config.
-4. Integration/DB tests: auth (hash/verify, dup-username), seed idempotency, `notifications` log insert on failure.
-5. Wire all members' tests into one `pytest` run that CI executes.
+### Nisal — voice, OCR, i18n completion
+1. **Verify + harden STT (voice in) and gTTS (voice out)** (Interim §3.5) on real audio: graceful "unavailable" with no key; Sinhala/Tamil/English all round-trip; spinner during transcription.
+2. **Prescription OCR demo path**: Gemini Vision → confirm-gate → pharmacy search; ship a sample prescription image (or keep the paste fallback) so the flow demos even without a photo. Dosage stays **verbatim** — never AI-generated.
+3. Localize every new string Janidu/Thevindu add (history view, chat spinner, booking needs-info); re-run the catalog-completeness check (every key has en/si/ta).
+4. Tests: `match_medicines`, `haversine_km`, `quotes_for` (totals/missing), **OCR-confirm gate fires no pharmacy lookup before confirm**, i18n completeness, `translate_dynamic` offline fallback.
+
+### Chanupa — data/agents support + test harness
+1. **Specialist panel with a paid key**: confirm the 3 specialists return real, *distinct* analyses (not the stub fallback) and the moderator surfaces real agree/disagree; ensure errors fall back to stub cleanly and log why.
+2. **Demo seed review**: every specialty has ≥1 doctor with available slots in the next 7 days (booking always shows alternatives), and pharmacies stock the demo medicines.
+3. Keep `tests/conftest.py` fixtures green; add auth (hash/verify, dup-username), seed idempotency, notifications-log-on-failure tests. Wire all lanes into one `pytest` run.
+4. Tighten the greedy `\{.*\}` JSON regex across chatbot/moderator/specialist to non-greedy/balanced extraction.
 
 ### ✅ Checkpoint 3 (whole team)
-- `pytest` green locally and in **CI**.
-- `docker compose up` serves the app at `localhost:8501` with persistence.
-- `ruff` + `black --check` clean.
+- "Book a doctor" / "price of paracetamol" return results in **< 3 s** with no perceived hang — online and offline.
+- Booking demonstrably runs through the **Pydantic AI agent** with a key (confirmed in logs/test); deterministic fallback without.
+- Every Interim-Report flow works in the browser in **en/si/ta**: chat, emergency, booking, future-visit reminder push, medicine comparison, prescription OCR+confirm, specialist panel, history view.
+- `pytest` green.
 
 ---
 
-## Phase 4 — Integration, Full-System Test, Docs & Required Diagrams
+## Phase 4 — Package, Prove, and Deliver (DevOps + Docs + Demo)
 
-**Goal:** converge, prove it end-to-end, and produce the deliverables. No new
-isolated features — only integration, docs, and demo prep.
+**Goal:** make it runnable by a judge in one command, prove it end-to-end, and
+produce every required deliverable. **No feature work** — only packaging,
+documentation, and demo prep.
 
 ### Whole team
-- **Joint end-to-end test session** (Janidu's "test all system" step): run the full demo walkthrough from the README against a real key, every flow, every language, online + offline.
+- **Joint end-to-end dry run** against a real key: the full Interim-Report walkthrough, every flow, every language, online **and** offline (key unset). Log any regression as a P4 blocker.
 
-### Janidu
-- Rewrite **`README.md`** so it is accurate now that RAG + Pydantic AI are real (remove/repair the previous overclaims).
-- **Architecture diagram** (agents, RAG, DB, ntfy, Streamlit) — required deliverable.
-- Own the E2E test script / checklist.
+### Chanupa — DevOps / packaging (the bulk)
+1. **`Dockerfile`** (slim Python 3.12, install `requirements.txt`, run Streamlit) + **`.dockerignore`** + **`docker-compose.yml`** with volumes for `project/db/app.db`, `project/rag/chroma_store`, and `.env` passthrough. The app already auto-seeds the DB and auto-ingests RAG on first boot, so `docker compose up` is cold-start-to-working with no manual steps.
+2. **`.github/workflows/ci.yml`**: `ruff` + `black --check` + `pytest` on push/PR (offline mode, no key); optional Docker build.
+3. Pin/verify deps: `pydantic-ai`, `google-generativeai`/`google-genai`, `chromadb`, `onnxruntime`, `gTTS`, `streamlit-geolocation`. Repo-wide lint/format clean; optional `pre-commit`.
+4. **Secrets audit**: confirm the leaked key is rotated; document the git-history exposure and that `.env` is gitignored; `CONTRIBUTING.md` + release checklist; tag a release.
 
-### Thevindu
-- **ER diagram** from the DB schema — required deliverable.
+### Janidu — docs + architecture
+1. Rewrite **`README.md`** to match reality: RAG = local Chroma/ONNX by default (optional Gemini embeddings via `RAG_EMBED_BACKEND`); routing = heuristic-first + direct Gemini JSON; Pydantic AI booking; CrewAI specialist panel. Remove prior overclaims; include exact run steps (local **and** Docker) and the offline story.
+2. **Architecture diagram** (Streamlit → panels → agents → RAG/DB/ntfy/Gemini) — required deliverable.
+3. Own the **E2E test script / demo checklist**.
 
-### Nisal
-- **Use-case diagram** — required deliverable.
-- Record the **1–2 min demo video (no voiceover)** per hackathon rules.
+### Thevindu / Nisal — required diagrams + video
+- **Thevindu**: **ER diagram** from `db/schema.sql` — required deliverable.
+- **Nisal**: **Use-case diagram** — required deliverable; record the **1–2 min demo video (no voiceover)** per hackathon rules.
 
-### Chanupa
-- Final CI/Docker polish; **secrets audit** (confirm key rotated; note the history exposure); `CONTRIBUTING.md` + release checklist; tag a release.
+### Demo assets (whole team, lead: Janidu)
+- **`DEMO.md`** — a scripted walkthrough on the seeded `demo*` accounts: which user to log in as, the exact phrase to type for each flow, and the expected on-screen result — including a Sinhala/Tamil pass and an offline (no-key) pass. This is what guarantees a smooth live demo.
 
 ### ✅ Final Checkpoint
-- Full system test passes online **and** offline.
-- All three diagrams (ER, architecture, use-case) committed.
-- Demo video recorded.
-- CI green, Docker runs, README accurate, key rotated. **Repo at 100%.**
+- `docker compose up` serves a fully working demo at `localhost:8501` (cold start, no manual ingest).
+- Full system test passes online **and** offline; all flows in en/si/ta.
+- README accurate; ER + architecture + use-case diagrams committed; demo video recorded; `DEMO.md` script verified.
+- CI green, lint clean, key rotated. **Repo + demo at 100%.**
 
 ---
 
