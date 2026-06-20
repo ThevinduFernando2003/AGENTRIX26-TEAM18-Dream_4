@@ -147,6 +147,9 @@ CATALOG: dict[str, dict[str, str]] = {
     "chat.voice_transcribing":{"en": "Transcribing your voice…",
                              "si": "ඔබේ හඬ පිටපත් කරමින්…",
                              "ta": "உங்கள் குரலை எழுத்துப்படி மாற்றுகிறது…"},
+    "chat.quickstart":      {"en": "👋 Welcome to MedBridge AI. Try: “book a heart doctor”, “price of paracetamol”, or “review my report” — or open the prescription panel below.",
+                             "si": "👋 MedBridge AI වෙත සාදරයෙන් පිළිගනිමු. උත්සාහ කරන්න: “හෘද වෛද්‍යවරයෙකු වෙන්කරන්න”, “පැරසිටමෝල් මිල”, හෝ “මගේ වාර්තාව සමාලෝචනය කරන්න” — නැතහොත් පහත වට්ටෝරු පැනලය විවෘත කරන්න.",
+                             "ta": "👋 MedBridge AI க்கு வரவேற்கிறோம். முயற்சிக்கவும்: “இதய மருத்துவரைப் பதிவு செய்”, “பாராசிட்டமால் விலை”, அல்லது “எனது அறிக்கையை மதிப்பாய்வு செய்” — அல்லது கீழே மருந்துச்சீட்டு பலகத்தைத் திறக்கவும்."},
     # ---- emergency ----
     "em.title":             {"en": "🚨 Possible medical emergency detected",
                              "si": "🚨 හදිසි වෛද්‍ය තත්ත්වයක් අනාවරණය විය හැක",

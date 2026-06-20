@@ -23,6 +23,9 @@ def render(user: dict) -> None:
 
     # ----- chat history -----
     history = basic_chatbot.load_history(user["user_id"], limit=50)
+    if not history:
+        # Friendly empty state so a first-time user knows what to try.
+        st.info(t("chat.quickstart", lang))
     for h in history:
         with st.chat_message(h["role"] if h["role"] in ("user", "assistant") else "assistant"):
             st.markdown(h["content"])

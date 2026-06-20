@@ -19,31 +19,33 @@ LANGUAGE_SHORT_LABELS = {
 
 
 def render_branding_styles() -> None:
-    """Inject CSS only for the top banner."""
+    """Inject CSS for the branded top banner + a few calm clinical layout tweaks."""
     st.markdown(
         """
         <style>
         .medbridge-banner {
-            background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+            background: linear-gradient(135deg, #0f766e 0%, #0d9488 55%, #14b8a6 100%);
             color: #f8fafc;
-            border-radius: 14px;
-            padding: 1.4rem 1.6rem;
-            margin: 0 0 1rem 0;
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+            border-radius: 16px;
+            padding: 1.5rem 1.75rem;
+            margin: 0 0 1.25rem 0;
+            box-shadow: 0 12px 30px rgba(13, 148, 136, 0.22);
+        }
+        .medbridge-banner__row { display: flex; align-items: center; gap: 0.9rem; }
+        .medbridge-banner__logo {
+            font-size: 2rem; line-height: 1;
+            background: rgba(255, 255, 255, 0.16);
+            border-radius: 12px; padding: 0.5rem 0.65rem;
         }
         .medbridge-banner__title {
-            font-size: 2.2rem;
-            font-weight: 800;
-            line-height: 1.15;
-            margin: 0;
+            font-size: 2rem; font-weight: 800; line-height: 1.12; margin: 0;
             letter-spacing: -0.02em;
         }
         .medbridge-banner__subtitle {
-            margin-top: 0.55rem;
-            color: rgba(226, 232, 240, 0.9);
-            font-size: 1rem;
+            margin-top: 0.3rem; color: rgba(240, 253, 250, 0.92); font-size: 1rem;
         }
+        /* Slightly rounder dataframes/tables for a tidier card feel. */
+        [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 10px; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -55,8 +57,13 @@ def render_top_banner(lang: str) -> None:
     st.markdown(
         f"""
         <div class="medbridge-banner">
-            <div class="medbridge-banner__title">{t('app.title', lang)}</div>
-            <div class="medbridge-banner__subtitle">{t('app.caption', lang)}</div>
+          <div class="medbridge-banner__row">
+            <div class="medbridge-banner__logo">🩺</div>
+            <div>
+              <div class="medbridge-banner__title">{t('app.title', lang)}</div>
+              <div class="medbridge-banner__subtitle">{t('app.caption', lang)}</div>
+            </div>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
