@@ -26,6 +26,3 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
-
-# local run artifact
-streamlit_run.log
