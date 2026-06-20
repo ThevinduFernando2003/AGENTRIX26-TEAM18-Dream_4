@@ -20,16 +20,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
-from typing import Optional
 
 from ..db.db import get_conn
 from ..models import ConsensusReport, SpecialistOpinion
+from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.moderator")
 
 _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 DEFAULT_DISCLAIMER = (
     "This synthesis is an AI-generated observation, not a medical diagnosis. "
@@ -37,16 +35,6 @@ DEFAULT_DISCLAIMER = (
 )
 
 NO_DISAGREEMENT_SENTENCE = "No material disagreement among the panel."
-
-
-def _extract_json(raw: str) -> Optional[dict]:
-    m = _JSON_RE.search(raw)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
 
 
 def _stub_synthesis(opinions: list[SpecialistOpinion]) -> ConsensusReport:
@@ -158,7 +146,7 @@ def synthesize(opinions: list[SpecialistOpinion], report_id: int) -> ConsensusRe
             )
             crew = Crew(agents=[agent], tasks=[task], verbose=False)
             raw = str(crew.kickoff())
-            parsed = _extract_json(raw)
+            parsed = extract_first_json(raw)
             if parsed is None:
                 raise ValueError("could not parse JSON from moderator output")
             consensus = ConsensusReport(**parsed)
