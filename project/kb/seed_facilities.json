@@ -1,0 +1,128 @@
+{
+  "_note": "SEED DATA — not live. Lat/lng are approximate Colombo-area points.",
+  "specialties": [
+    {"name": "General Practice",   "description": "Primary care / GP consultations."},
+    {"name": "Cardiology",         "description": "Heart and circulatory conditions."},
+    {"name": "Internal Medicine",  "description": "Adult non-surgical medicine."},
+    {"name": "Pediatrics",         "description": "Children's healthcare."},
+    {"name": "Dermatology",        "description": "Skin conditions."},
+    {"name": "ENT",                "description": "Ear, nose, throat."}
+  ],
+  "facilities": [
+    {
+      "name": "Asiri Central Hospital",
+      "type": "private",
+      "address": "Norris Canal Road, Colombo 10",
+      "lat": 6.9180, "lng": 79.8650, "phone": "0114665500",
+      "doctors": [
+        {"name": "Dr. Sunil Perera",    "specialty": "Cardiology",        "channeling_fee": 3500,
+         "slots": [
+           {"day_offset": 1, "time": "10:00", "is_available": false},
+           {"day_offset": 1, "time": "10:30", "is_available": true},
+           {"day_offset": 1, "time": "11:00", "is_available": true},
+           {"day_offset": 2, "time": "10:00", "is_available": true},
+           {"day_offset": 2, "time": "10:30", "is_available": true},
+           {"day_offset": 3, "time": "14:00", "is_available": true}
+         ]},
+        {"name": "Dr. Ramani Silva",    "specialty": "Internal Medicine", "channeling_fee": 3000,
+         "slots": [
+           {"day_offset": 1, "time": "09:00", "is_available": true},
+           {"day_offset": 1, "time": "09:30", "is_available": false},
+           {"day_offset": 2, "time": "09:00", "is_available": true},
+           {"day_offset": 2, "time": "09:30", "is_available": true},
+           {"day_offset": 3, "time": "10:00", "is_available": true},
+           {"day_offset": 4, "time": "10:00", "is_available": true}
+         ]}
+      ]
+    },
+    {
+      "name": "Nawaloka Hospital",
+      "type": "private",
+      "address": "23 Deshamanya H K Dharmadasa Mawatha, Colombo 2",
+      "lat": 6.9270, "lng": 79.8530, "phone": "0115577111",
+      "doctors": [
+        {"name": "Dr. Anura Jayasuriya", "specialty": "Cardiology", "channeling_fee": 4000,
+         "slots": [
+           {"day_offset": 1, "time": "15:00", "is_available": true},
+           {"day_offset": 1, "time": "15:30", "is_available": true},
+           {"day_offset": 2, "time": "15:00", "is_available": false},
+           {"day_offset": 2, "time": "15:30", "is_available": true},
+           {"day_offset": 3, "time": "16:00", "is_available": true},
+           {"day_offset": 5, "time": "10:00", "is_available": true}
+         ]}
+      ]
+    },
+    {
+      "name": "Lanka Hospitals",
+      "type": "private",
+      "address": "578 Elvitigala Mawatha, Colombo 5",
+      "lat": 6.8870, "lng": 79.8770, "phone": "0115430000",
+      "doctors": [
+        {"name": "Dr. Chamari Fernando", "specialty": "Dermatology", "channeling_fee": 2800,
+         "slots": [
+           {"day_offset": 1, "time": "13:00", "is_available": true},
+           {"day_offset": 2, "time": "13:00", "is_available": true},
+           {"day_offset": 2, "time": "13:30", "is_available": false},
+           {"day_offset": 3, "time": "13:00", "is_available": true},
+           {"day_offset": 4, "time": "13:00", "is_available": true},
+           {"day_offset": 5, "time": "13:00", "is_available": true}
+         ]},
+        {"name": "Dr. Mahesh Wickrema",  "specialty": "ENT",         "channeling_fee": 3200,
+         "slots": [
+           {"day_offset": 1, "time": "17:00", "is_available": true},
+           {"day_offset": 2, "time": "17:00", "is_available": true},
+           {"day_offset": 3, "time": "17:00", "is_available": false},
+           {"day_offset": 4, "time": "17:00", "is_available": true}
+         ]}
+      ]
+    },
+    {
+      "name": "National Hospital of Sri Lanka",
+      "type": "government",
+      "address": "Regent Street, Colombo 10",
+      "lat": 6.9168, "lng": 79.8623, "phone": "0112691111",
+      "doctors": [
+        {"name": "Dr. Kumari Bandara",    "specialty": "General Practice", "channeling_fee": 0,
+         "slots": [
+           {"day_offset": 1, "time": "08:00", "is_available": true},
+           {"day_offset": 1, "time": "08:30", "is_available": true},
+           {"day_offset": 2, "time": "08:00", "is_available": true},
+           {"day_offset": 2, "time": "08:30", "is_available": true},
+           {"day_offset": 3, "time": "08:00", "is_available": true},
+           {"day_offset": 4, "time": "08:00", "is_available": true}
+         ]}
+      ]
+    },
+    {
+      "name": "Castle Street Hospital for Women",
+      "type": "government",
+      "address": "Castle Street, Colombo 8",
+      "lat": 6.9180, "lng": 79.8700, "phone": "0112696231",
+      "doctors": [
+        {"name": "Dr. Niluka Senanayake", "specialty": "Pediatrics", "channeling_fee": 0,
+         "slots": [
+           {"day_offset": 1, "time": "11:00", "is_available": true},
+           {"day_offset": 2, "time": "11:00", "is_available": true},
+           {"day_offset": 3, "time": "11:00", "is_available": true},
+           {"day_offset": 4, "time": "11:00", "is_available": true}
+         ]}
+      ]
+    },
+    {
+      "name": "Durdans Hospital",
+      "type": "private",
+      "address": "3 Alfred Place, Colombo 3",
+      "lat": 6.9050, "lng": 79.8530, "phone": "0115410000",
+      "doctors": [
+        {"name": "Dr. Roshan Wijesinghe", "specialty": "Internal Medicine", "channeling_fee": 3500,
+         "slots": [
+           {"day_offset": 1, "time": "18:00", "is_available": true},
+           {"day_offset": 2, "time": "18:00", "is_available": true},
+           {"day_offset": 3, "time": "18:00", "is_available": false},
+           {"day_offset": 4, "time": "18:00", "is_available": true},
+           {"day_offset": 5, "time": "18:00", "is_available": true}
+         ]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Secrets
+project/.env
+.env
+
+# SQLite database (generated/seeded at runtime, not source)
+project/db/app.db
+project/db/*.db-journal
+project/db/*.db-wal
+project/db/*.db-shm
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

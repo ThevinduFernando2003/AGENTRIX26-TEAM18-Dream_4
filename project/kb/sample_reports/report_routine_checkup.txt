@@ -1,0 +1,35 @@
+SEED SAMPLE REPORT — not a real patient record. Used for MedBridge AI demo only.
+
+Patient: Ms. S. R. (34F)
+Date: 2026-06-12
+Facility: Lanka Hospitals, Colombo
+
+Reason for visit:
+Annual health check, asymptomatic. Family history of hypertension on mother's
+side. Works as a software engineer, sedentary job, exercises 2x/week.
+
+Examination:
+General: well-looking, BMI 23.
+BP 118/76, HR 70, SpO2 99% on RA, afebrile.
+CVS: heart sounds normal, no added sounds.
+Resp: clear bilaterally.
+Abdo: soft, non-tender.
+Neuro: grossly normal.
+
+Investigations:
+- FBC: Hb 12.6, WCC 6.4, platelets 248. All within normal range.
+- Fasting glucose: 5.1 mmol/L.
+- HbA1c: 5.3%.
+- Lipid panel: LDL 102, HDL 58, TG 95.
+- LFTs and U&Es: normal.
+- Urinalysis: clear, no protein, no glucose, no blood.
+- ECG: sinus rhythm 68, normal axis, no abnormalities.
+- CXR: not performed (asymptomatic, low yield).
+
+Impression:
+Routine annual review. No abnormalities detected. Cardiovascular risk low.
+
+Plan:
+Continue current lifestyle. Repeat lipid panel and fasting glucose in 2 years
+unless symptoms develop. Encourage 150 minutes moderate exercise per week.
+No medication required.

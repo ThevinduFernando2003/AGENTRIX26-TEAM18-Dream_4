@@ -1,0 +1,184 @@
+"""i18n: static catalog of UI strings + dynamic LLM translation.
+
+- `t(key, lang)` returns a translated UI label from the static
+  CATALOG. Unknown keys/langs fall back to English.
+- `translate_dynamic(text, lang)` runs Gemini for free-form agent
+  replies. Cached per process so the same reply isn't re-translated
+  on every Streamlit rerun.
+
+Disclaimer translations are pre-baked (not LLM-translated) so the
+wording is reviewable and never drifts.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from functools import lru_cache
+from typing import Literal
+
+logger = logging.getLogger("medbridge.i18n")
+
+LANG = Literal["en", "si", "ta"]
+LANG_NAMES = {"en": "English", "si": "Sinhala", "ta": "Tamil"}
+
+
+CATALOG: dict[str, dict[str, str]] = {
+    # ---- auth ----
+    "auth.title":           {"en": "MedBridge AI",
+                             "si": "මෙඩ්බ්‍රිජ් AI",
+                             "ta": "மெட்பிரிட்ஜ் AI"},
+    "auth.tagline":         {"en": "Multi-agent healthcare navigator — demo build (Team Dream_4)",
+                             "si": "බහු-නියෝජිත සෞඛ්‍ය මාර්ගෝපදේශක — demo build (Team Dream_4)",
+                             "ta": "பல-முகவர் சுகாதார வழிகாட்டி — demo build (Team Dream_4)"},
+    "auth.tab.login":       {"en": "Log in", "si": "පුරන්න", "ta": "உள்நுழை"},
+    "auth.tab.signup":      {"en": "Sign up", "si": "ලියාපදිංචි වන්න", "ta": "பதிவு செய்"},
+    "auth.username":        {"en": "Username", "si": "පරිශීලක නාමය", "ta": "பயனர்பெயர்"},
+    "auth.password":        {"en": "Password", "si": "මුරපදය", "ta": "கடவுச்சொல்"},
+    "auth.fullname":        {"en": "Full name", "si": "සම්පූර්ණ නම", "ta": "முழுப்பெயர்"},
+    "auth.age":             {"en": "Age", "si": "වයස", "ta": "வயது"},
+    "auth.gender":          {"en": "Gender", "si": "ස්ත්‍රී/පුරුෂ භාවය", "ta": "பாலினம்"},
+    "auth.pref_lang":       {"en": "Preferred language", "si": "කැමති භාෂාව", "ta": "விருப்ப மொழி"},
+    "auth.family_name":     {"en": "Family contact name (for emergency push)",
+                             "si": "පවුලේ සම්බන්ධතා නම (හදිසි දැනුම්දීම සඳහා)",
+                             "ta": "குடும்ப தொடர்பு பெயர் (அவசர அறிவிப்புக்கு)"},
+    "auth.family_phone":    {"en": "Family contact phone",
+                             "si": "පවුලේ සම්බන්ධතා දුරකථන",
+                             "ta": "குடும்ப தொடர்பு தொலைபேசி"},
+    "auth.login_btn":       {"en": "Log in", "si": "පුරන්න", "ta": "உள்நுழை"},
+    "auth.signup_btn":      {"en": "Create account", "si": "ගිණුම සාදන්න", "ta": "கணக்கை உருவாக்கு"},
+    "auth.invalid":         {"en": "Invalid username or password.",
+                             "si": "පරිශීලක නාමය හෝ මුරපදය වැරදිය.",
+                             "ta": "தவறான பயனர்பெயர் அல்லது கடவுச்சொல்."},
+    # ---- sidebar ----
+    "sidebar.mock_banner":  {"en": "Demo build — all facility, doctor, slot, pharmacy and price data is SEED / MOCK data.",
+                             "si": "Demo build — සියලුම පහසුකම්, වෛද්‍ය, වේලාව, ෆාමසි සහ මිල දත්ත SEED / MOCK දත්ත වේ.",
+                             "ta": "Demo build — அனைத்து வசதி, மருத்துவர், நேரம், மருந்தகம் மற்றும் விலை தரவும் SEED / MOCK தரவு ஆகும்."},
+    "sidebar.topic_label":  {"en": "Family-alert push topic",
+                             "si": "පවුල් අනතුරු ඇඟවීමේ Push මාතෘකාව",
+                             "ta": "குடும்ப எச்சரிக்கை Push தலைப்பு"},
+    "sidebar.topic_caption":{"en": "Family subscribes at https://ntfy.sh/{topic} (free, no signup) to get emergency notifications.",
+                             "si": "පවුලේ අය හදිසි දැනුම්දීම් ලබා ගැනීමට https://ntfy.sh/{topic} හි (නොමිලේ, ලියාපදිංචියකින් තොරව) දායක වෙති.",
+                             "ta": "அவசர அறிவிப்புகளைப் பெற குடும்பத்தினர் https://ntfy.sh/{topic} இல் (இலவசம், பதிவு தேவையில்லை) குழுசேருகிறார்கள்."},
+    "sidebar.location":     {"en": "Your location (for pharmacy distance)",
+                             "si": "ඔබේ ස්ථානය (ෆාමසි දුර සඳහා)",
+                             "ta": "உங்கள் இருப்பிடம் (மருந்தக தூரத்திற்கு)"},
+    "sidebar.location_manual":{"en": "Enter coordinates manually",
+                               "si": "ඛණ්ඩාංක අතින් ඇතුළත් කරන්න",
+                               "ta": "ஆயங்களை கைமுறையாக உள்ளிடவும்"},
+    "sidebar.use_coords":   {"en": "Use these coordinates",
+                             "si": "මෙම ඛණ්ඩාංක භාවිතා කරන්න",
+                             "ta": "இந்த ஆயங்களைப் பயன்படுத்துக"},
+    "sidebar.logout":       {"en": "Log out", "si": "ඉවත් වන්න", "ta": "வெளியேறு"},
+    "sidebar.tts_toggle":   {"en": "🔊 Speak assistant replies",
+                             "si": "🔊 සහායකගේ පිළිතුරු කථනය කරන්න",
+                             "ta": "🔊 உதவியாளரின் பதில்களை பேசவும்"},
+    "sidebar.reminders_btn":{"en": "🔔 Check my reminders",
+                             "si": "🔔 මගේ මතක්කිරීම් පරීක්ෂා කරන්න",
+                             "ta": "🔔 எனது நினைவூட்டல்களை சரிபார்"},
+    "sidebar.reminders_none":{"en": "No reminders due in the next 7 days.",
+                              "si": "ඉදිරි දින 7 තුළ මතක් කිරීම් කිසිවක් නොමැත.",
+                              "ta": "அடுத்த 7 நாட்களில் எந்த நினைவூட்டலும் இல்லை."},
+    "sidebar.reminders_send":{"en": "Send push for {n} reminder(s) now",
+                              "si": "දැන් මතක් කිරීම් {n} සඳහා push යවන්න",
+                              "ta": "இப்போது {n} நினைவூட்டல்(களுக்கு) push அனுப்பு"},
+    "sidebar.reminders_sent":{"en": "Sent {n} push notification(s).",
+                              "si": "Push දැනුම්දීම් {n} ක් යවන ලදී.",
+                              "ta": "{n} Push அறிவிப்புகள் அனுப்பப்பட்டன."},
+    # ---- chat ----
+    "app.title":            {"en": "🩺 MedBridge AI",
+                             "si": "🩺 මෙඩ්බ්‍රිජ් AI",
+                             "ta": "🩺 மெட்பிரிட்ஜ் AI"},
+    "app.caption":          {"en": "Multi-agent healthcare navigator — Team Dream_4 · AgenTrix 2026",
+                             "si": "බහු-නියෝජිත සෞඛ්‍ය මාර්ගෝපදේශක — Team Dream_4 · AgenTrix 2026",
+                             "ta": "பல-முகவர் சுகாதார வழிகாட்டி — Team Dream_4 · AgenTrix 2026"},
+    "chat.placeholder":     {"en": "Describe your symptoms, or ask to book an appointment or check medicine prices…",
+                             "si": "ඔබේ රෝග ලක්ෂණ විස්තර කරන්න, හෝ වෙලාවක් වෙන්කිරීමට හෝ ඖෂධ මිල පරීක්ෂා කිරීමට කියන්න…",
+                             "ta": "உங்கள் அறிகுறிகளை விவரிக்கவும், அல்லது சந்திப்பு பதிவு செய்ய அல்லது மருந்து விலையை சரிபார்க்க கேட்கவும்…"},
+    "chat.voice_expander":  {"en": "🎙️ Voice input (Sinhala / Tamil / English)",
+                             "si": "🎙️ හඬ ආදානය (සිංහල / දෙමළ / ඉංග්‍රීසි)",
+                             "ta": "🎙️ குரல் உள்ளீடு (சிங்களம் / தமிழ் / ஆங்கிலம்)"},
+    "chat.voice_transcribe":{"en": "Transcribe & send",
+                             "si": "පිටපත් කර යවන්න",
+                             "ta": "எழுதி அனுப்பு"},
+    "chat.voice_unavail":   {"en": "Voice input needs GEMINI_API_KEY. Type instead, or set the key.",
+                             "si": "හඬ ආදානයට GEMINI_API_KEY අවශ්‍යයි. ඒ වෙනුවට type කරන්න, හෝ යතුර සකසන්න.",
+                             "ta": "குரல் உள்ளீட்டுக்கு GEMINI_API_KEY தேவை. அதற்கு பதிலாக தட்டச்சு செய்யவும், அல்லது விசையை அமைக்கவும்."},
+    # ---- emergency ----
+    "em.title":             {"en": "🚨 Possible medical emergency detected",
+                             "si": "🚨 හදිසි වෛද්‍ය තත්ත්වයක් අනාවරණය විය හැක",
+                             "ta": "🚨 சாத்தியமான மருத்துவ அவசரநிலை கண்டறியப்பட்டது"},
+    "em.confirm":           {"en": "✅ Yes, this is an emergency",
+                             "si": "✅ ඔව්, මෙය හදිසි අවස්ථාවකි",
+                             "ta": "✅ ஆம், இது அவசரநிலை"},
+    "em.dismiss":           {"en": "❌ No, false alarm",
+                             "si": "❌ නැත, වැරදි අනතුරු ඇඟවීමයි",
+                             "ta": "❌ இல்லை, தவறான எச்சரிக்கை"},
+    "em.call_btn":          {"en": "📞  Call 1990 now (Suwa Seriya Ambulance)",
+                             "si": "📞  දැන් 1990 අමතන්න (සුව සැරිය ගිලන් රථය)",
+                             "ta": "📞  இப்போது 1990 அழைக்கவும் (சுவசெரிய ஆம்புலன்ஸ்)"},
+    "em.family_notified":   {"en": "Family contact notified via ntfy.sh.",
+                             "si": "පවුලේ සම්බන්ධතාව ntfy.sh හරහා දැනුවත් කරන ලදී.",
+                             "ta": "குடும்ப தொடர்பாளர் ntfy.sh வழியாக அறிவிக்கப்பட்டார்."},
+    # ---- panels (booking/medicine/report) ----
+    "panel.booking.title":  {"en": "Booking suggestions",
+                             "si": "වේලාව වෙන් කිරීමේ යෝජනා",
+                             "ta": "முன்பதிவு பரிந்துரைகள்"},
+    "panel.booking.book":   {"en": "Book", "si": "වෙන් කරන්න", "ta": "பதிவு செய்"},
+    "panel.medicine.title": {"en": "Pharmacy comparison",
+                             "si": "ෆාමසි සංසන්දනය",
+                             "ta": "மருந்தக ஒப்பீடு"},
+    "panel.report.title":   {"en": "📄 Specialist Panel report review",
+                             "si": "📄 විශේෂඥ මණ්ඩලයේ වාර්තා සමාලෝචනය",
+                             "ta": "📄 நிபுணர் குழுவின் அறிக்கை மதிப்பாய்வு"},
+    "panel.report.run":     {"en": "Run Specialist Panel",
+                             "si": "විශේෂඥ මණ්ඩලය ක්‍රියාත්මක කරන්න",
+                             "ta": "நிபுணர் குழுவை இயக்கவும்"},
+    # ---- disclaimer ----
+    "disclaimer.footer":    {"en": "_This is an AI-generated observation, not a medical diagnosis. Please consult a licensed physician or pharmacist._",
+                             "si": "_මෙය AI විසින් උපදවන ලද නිරීක්ෂණයකි, වෛද්‍ය රෝග විනිශ්චයක් නොවේ. කරුණාකර බලපත්‍රලාභී වෛද්‍යවරයෙකු හෝ ඖෂධවේදියෙකු හමුවන්න._",
+                             "ta": "_இது AI-ஆல் உருவாக்கப்பட்ட கருத்து, மருத்துவ நோய் கண்டறிதல் அல்ல. தயவுசெய்து உரிமம் பெற்ற மருத்துவர் அல்லது மருந்தாளரை அணுகவும்._"},
+}
+
+
+def t(key: str, lang: str = "en", **fmt: str) -> str:
+    """Look up a localised string. Falls back to English if missing."""
+    entry = CATALOG.get(key)
+    if entry is None:
+        return key  # surface the missing key in dev rather than crashing
+    val = entry.get(lang) or entry.get("en") or key
+    if fmt:
+        try:
+            return val.format(**fmt)
+        except (KeyError, IndexError):
+            return val
+    return val
+
+
+@lru_cache(maxsize=512)
+def _translate_cached(text: str, lang: str, model_id: str) -> str:
+    try:
+        import google.generativeai as genai  # type: ignore
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        model = genai.GenerativeModel(model_id)
+        prompt = (
+            f"Translate the following text to {LANG_NAMES.get(lang, lang)}. "
+            "Preserve all numbers, drug names, doctor names, and dosages exactly. "
+            "Return ONLY the translation, no commentary, no quotes.\n\n"
+            f"--- Text ---\n{text}\n--- End ---"
+        )
+        resp = model.generate_content(prompt)
+        out = (getattr(resp, "text", "") or "").strip()
+        return out or text
+    except Exception as exc:
+        logger.warning("translate_dynamic failed (%s): %s", lang, exc)
+        return text
+
+
+def translate_dynamic(text: str, lang: str) -> str:
+    if not text or lang == "en":
+        return text
+    if not os.environ.get("GEMINI_API_KEY"):
+        return text
+    model_id = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    return _translate_cached(text, lang, model_id)

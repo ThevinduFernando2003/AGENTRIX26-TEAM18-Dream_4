@@ -1,0 +1,65 @@
+{
+  "_note": "SEED DATA — not live. Passwords here are plaintext and will be bcrypt-hashed by the loader.",
+  "users": [
+    {
+      "username": "demo1",
+      "password": "demo1pass",
+      "full_name": "Nimal Perera",
+      "age": 42,
+      "gender": "M",
+      "preferred_language": "en",
+      "family_contact_name": "Kamala Perera",
+      "family_contact_phone": "+94771111111"
+    },
+    {
+      "username": "demo2",
+      "password": "demo2pass",
+      "full_name": "Anushka Silva",
+      "age": 29,
+      "gender": "F",
+      "preferred_language": "en",
+      "family_contact_name": "Ruwan Silva",
+      "family_contact_phone": "+94772222222"
+    },
+    {
+      "username": "demo3",
+      "password": "demo3pass",
+      "full_name": "Saman Fernando",
+      "age": 65,
+      "gender": "M",
+      "preferred_language": "si",
+      "family_contact_name": "Priya Fernando",
+      "family_contact_phone": "+94773333333"
+    },
+    {
+      "username": "demo4",
+      "password": "demo4pass",
+      "full_name": "Devi Subramaniam",
+      "age": 51,
+      "gender": "F",
+      "preferred_language": "ta",
+      "family_contact_name": "Raja Subramaniam",
+      "family_contact_phone": "+94774444444"
+    },
+    {
+      "username": "demo5",
+      "password": "demo5pass",
+      "full_name": "Tharindu Jayasinghe",
+      "age": 34,
+      "gender": "M",
+      "preferred_language": "en",
+      "family_contact_name": "Ishani Jayasinghe",
+      "family_contact_phone": "+94775555555"
+    },
+    {
+      "username": "demo6",
+      "password": "demo6pass",
+      "full_name": "Hashini Wickramasinghe",
+      "age": 27,
+      "gender": "F",
+      "preferred_language": "en",
+      "family_contact_name": "Dilshan Wickramasinghe",
+      "family_contact_phone": "+94776666666"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+SEED SAMPLE REPORT — not a real patient record. Used for MedBridge AI demo only.
+Designed to provoke independent disagreement across cardiology, internal
+medicine, and radiology perspectives.
+
+Patient: Mr. D. W. (58M)
+Date: 2026-06-18
+Facility: Nawaloka Hospital, Colombo
+
+Presenting complaint:
+3-month history of episodic dyspnoea on exertion. Two episodes of palpitations.
+Mild dry cough at night that has worsened over the last 2 weeks. No frank
+chest pain but a vague "tightness" across the upper chest. Fatigue out of
+keeping with activity level. No fever, no haemoptysis. No recent travel.
+
+Past history:
+Hypertension on amlodipine. Ex-smoker (quit 8 years ago, 30 pack-years).
+Father had pulmonary fibrosis. Mother had ischaemic heart disease.
+
+Examination:
+BP 142/88. HR 88, regular. SpO2 95% on RA, drops to 92% after walking 30 m.
+JVP not raised. Fine bibasal crackles on auscultation, not cleared by coughing.
+Heart sounds: soft S1, normal S2, no clear murmur but possibly a soft S3.
+No peripheral oedema. Mild clubbing.
+
+Investigations:
+- ECG: sinus rhythm 88, left axis deviation, voltage criteria for LVH.
+  T-wave inversion in lateral leads.
+- Troponin (high-sensitivity): 22 ng/L (URL 19). Repeat at 6h: 24 ng/L.
+- NT-proBNP: 612 pg/mL (mildly elevated).
+- D-dimer: 380 ng/mL (just above local cutoff of 250).
+- FBC, U&E, LFT, TFT: largely unremarkable. Mild normocytic anaemia (Hb 11.8).
+- CXR: increased reticular markings in both lower zones. Cardiothoracic ratio
+  borderline at 0.51. Possible early interstitial change vs. early pulmonary
+  congestion — radiologist comment "non-specific, please correlate clinically."
+- Echocardiogram: LV ejection fraction 48% (mild impairment), mild concentric
+  LVH, diastolic dysfunction grade I. No regional wall motion abnormality.
+- Spirometry: not yet performed.
+- HRCT chest: not yet performed.
+
+Notes from attending:
+"Differential is broad: early heart failure with preserved/mildly reduced EF,
+early interstitial lung disease (given family history and clubbing), and
+sub-segmental PE cannot be entirely excluded given the borderline D-dimer.
+Patient is haemodynamically stable for now. Plan: HRCT chest, full spirometry
+with DLCO, repeat troponin and BNP in 24h, consider CTPA depending on HRCT.
+Cardiology and respiratory team input requested."
+
+This report intentionally contains overlapping cardiac and pulmonary findings
+to test whether the Specialist Panel honestly disagrees rather than smoothing
+the findings into a single tidy diagnosis. The Moderator must surface the
+disagreement.
