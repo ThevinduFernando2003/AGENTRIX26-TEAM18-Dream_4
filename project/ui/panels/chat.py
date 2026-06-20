@@ -47,7 +47,10 @@ def render(user: dict) -> None:
 
     with st.chat_message("user"):
         st.markdown(user_text)
-    result = basic_chatbot.handle(user["user_id"], user_text, preferred_language=lang)
+    # Echo the user turn above immediately, then show a spinner while the router
+    # runs so the chat never looks frozen (heuristic-first keeps this near-instant).
+    with st.spinner(t("chat.thinking", lang)):
+        result = basic_chatbot.handle(user["user_id"], user_text, preferred_language=lang)
 
     if result.route == "emergency":
         st.session_state["pending_emergency"] = {

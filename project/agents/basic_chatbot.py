@@ -103,65 +103,44 @@ class ChatResult:
     emergency: EmergencyDecision | None = None
 
 
-_crew_agent = None  # lazy init
-
-
-def _get_agent():
-    """Lazy-build the CrewAI agent. Gracefully degrades if CrewAI / API key absent."""
-    global _crew_agent
-    if _crew_agent is not None:
-        return _crew_agent
-    if not os.environ.get("GEMINI_API_KEY"):
-        return None
-    try:
-        from crewai import LLM, Agent  # type: ignore
-
-        llm = LLM(model=f"gemini/{_GEMINI_MODEL}", api_key=os.environ["GEMINI_API_KEY"])
-        _crew_agent = Agent(
-            role="Healthcare Navigator Orchestrator",
-            goal=(
-                "Triage the patient's message, classify intent, and produce a short "
-                "user-facing reply. Never diagnose; never invent clinical facts."
-            ),
-            backstory=(
-                "You coordinate a team of specialist agents (booking, medicine tracker, "
-                "report review) and never replace a licensed physician."
-            ),
-            llm=llm,
-            verbose=False,
-            allow_delegation=False,
-        )
-        return _crew_agent
-    except Exception as exc:
-        logger.warning("CrewAI agent unavailable: %s", exc)
-        return None
+# Hard wall-clock budget for the router LLM call. On a throttled key the request
+# fails fast to the heuristic instead of hanging the chat.
+_LLM_TIMEOUT_S = 8
 
 
 def _run_llm(user_text: str, transcript: str) -> dict | None:
-    agent = _get_agent()
-    if agent is None:
-        return None
-    try:
-        from crewai import Crew, Task  # type: ignore
+    """Classify intent + draft a reply with a single direct Gemini JSON call.
 
-        task = Task(
-            description=(
-                _SYSTEM
-                + "\n\n--- Conversation so far ---\n"
-                + transcript
-                + "\n\n--- New patient message ---\n"
-                + user_text
-                + "\n\nReturn ONLY the JSON object."
-            ),
-            expected_output="A single JSON object matching the schema in the instructions.",
-            agent=agent,
+    Replaces the former CrewAI Agent/Task/Crew router. That orchestration added
+    ~5s per message and, on a rate-limited key, litellm retried 429s with backoff
+    into 30-60s hangs (the perceived "stuck"). One direct call with a hard timeout
+    and NO retries fails fast to the heuristic, so the UI never freezes. Returns
+    None on any failure (missing key, timeout, parse error) → caller uses heuristic.
+    """
+    if not os.environ.get("GEMINI_API_KEY"):
+        return None
+    prompt = (
+        _SYSTEM
+        + "\n\n--- Conversation so far ---\n"
+        + transcript
+        + "\n\n--- New patient message ---\n"
+        + user_text
+        + "\n\nReturn ONLY the JSON object."
+    )
+    try:
+        import google.generativeai as genai  # type: ignore
+
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+        model = genai.GenerativeModel(_GEMINI_MODEL)
+        resp = model.generate_content(
+            prompt,
+            generation_config={"response_mime_type": "application/json"},
+            request_options={"timeout": _LLM_TIMEOUT_S},
         )
-        crew = Crew(agents=[agent], tasks=[task], verbose=False)
-        result = crew.kickoff()
-        raw = str(result)
+        raw = (getattr(resp, "text", "") or "").strip()
         return _extract_json(raw)
     except Exception as exc:
-        logger.warning("LLM call failed: %s", exc)
+        logger.warning("LLM router call failed (%s) — using heuristic", exc)
         return None
 
 
@@ -402,7 +381,16 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
     history = load_history(user_id, limit=10)
     transcript = _format_transcript(history[:-1])  # exclude the message we just inserted
 
-    parsed = _run_llm(user_text, transcript) or _heuristic_route(user_text)
+    # Heuristic-first routing: classify cheaply, and only spend an LLM call when the
+    # intent is genuinely ambiguous. Unambiguous domain intents (booking/medicine/
+    # report verbs) skip the LLM entirely — this is what removes the multi-second
+    # hang and, on a rate-limited key, guarantees the chat never blocks. The LLM is
+    # reserved for the "general" bucket, where a thoughtful triage reply matters.
+    heuristic = _heuristic_route(user_text)
+    if heuristic["route"] != "general":
+        parsed = heuristic
+    else:
+        parsed = _run_llm(user_text, transcript) or heuristic
     try:
         out = RouterOutput(**parsed)
     except Exception:
