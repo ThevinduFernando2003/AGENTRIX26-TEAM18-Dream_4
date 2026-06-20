@@ -8,6 +8,7 @@ import streamlit as st
 from passlib.context import CryptContext
 
 from ..db.db import get_conn
+from ..i18n.translate import t
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -97,34 +98,39 @@ def render_auth_gate() -> Optional[dict]:
     if user:
         return user
 
-    st.title("MedBridge AI")
-    st.caption("Multi-agent healthcare navigator — demo build (Team Dream_4)")
+    # Auth screen runs before we know the user's preference — show English
+    # primary and (Si/Ta) variants of the key labels for accessibility. Inside
+    # the app proper, language flips to the user's choice.
+    L = "en"
 
-    tab_login, tab_signup = st.tabs(["Log in", "Sign up"])
+    st.title(t("auth.title", L))
+    st.caption(t("auth.tagline", L))
+
+    tab_login, tab_signup = st.tabs([t("auth.tab.login", L), t("auth.tab.signup", L)])
 
     with tab_login:
         with st.form("login_form", clear_on_submit=False):
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
-            if st.form_submit_button("Log in"):
+            u = st.text_input(t("auth.username", L))
+            p = st.text_input(t("auth.password", L), type="password")
+            if st.form_submit_button(t("auth.login_btn", L)):
                 uid = login(u.strip(), p)
                 if uid is None:
-                    st.error("Invalid username or password.")
+                    st.error(t("auth.invalid", L))
                 else:
                     st.session_state["user_id"] = uid
                     st.rerun()
 
     with tab_signup:
         with st.form("signup_form", clear_on_submit=False):
-            u = st.text_input("Username", key="su_user")
-            p = st.text_input("Password (min 6 chars)", type="password", key="su_pw")
-            full_name = st.text_input("Full name", key="su_name")
-            age = st.number_input("Age", min_value=0, max_value=120, value=30, key="su_age")
-            gender = st.selectbox("Gender", ["", "M", "F", "Other"], key="su_gender")
-            lang = st.selectbox("Preferred language", ["en", "si", "ta"], key="su_lang")
-            fc_name = st.text_input("Family contact name (for emergency push)", key="su_fcn")
-            fc_phone = st.text_input("Family contact phone", key="su_fcp")
-            if st.form_submit_button("Create account"):
+            u = st.text_input(t("auth.username", L), key="su_user")
+            p = st.text_input(t("auth.password", L) + " (min 6 chars)", type="password", key="su_pw")
+            full_name = st.text_input(t("auth.fullname", L), key="su_name")
+            age = st.number_input(t("auth.age", L), min_value=0, max_value=120, value=30, key="su_age")
+            gender = st.selectbox(t("auth.gender", L), ["", "M", "F", "Other"], key="su_gender")
+            lang = st.selectbox(t("auth.pref_lang", L), ["en", "si", "ta"], key="su_lang")
+            fc_name = st.text_input(t("auth.family_name", L), key="su_fcn")
+            fc_phone = st.text_input(t("auth.family_phone", L), key="su_fcp")
+            if st.form_submit_button(t("auth.signup_btn", L)):
                 ok, msg = signup(
                     u.strip(), p, full_name, int(age), gender, lang, fc_name, fc_phone
                 )

@@ -19,9 +19,11 @@ import logging
 import os
 import re
 from dataclasses import dataclass
+from datetime import date as dtdate, timedelta
 from typing import Optional
 
 from ..db.db import get_conn
+from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
 from . import emergency
 
@@ -199,9 +201,84 @@ def _heuristic_route(text: str) -> dict:
     }
 
 
+# ---------- future-visit reminder detection (Tier 3) ----------
+
+_REM_PATTERNS = [
+    # come back / follow up / see me again — in N units
+    re.compile(r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return)\s+(?:in\s+)?(\d+)\s*(day|days|week|weeks|month|months)\b", re.IGNORECASE),
+    # come back / follow up — in (a|one|two) month/week
+    re.compile(r"\b(?:come back|follow[- ]?up|return)\s+(?:in\s+)?(a|an|one|two|three|four|six)\s+(day|week|month)s?\b", re.IGNORECASE),
+    # explicit ISO date
+    re.compile(r"\b(?:on|by)\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE),
+    # "next month" / "next week"
+    re.compile(r"\b(?:come back|follow[- ]?up|see (?:me|you|the doctor) again|return).{0,40}\bnext\s+(week|month)\b", re.IGNORECASE),
+]
+
+_WORD_NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "six": 6}
+
+
+def detect_reminder(text: str, today: Optional[dtdate] = None) -> Optional[str]:
+    """Return target_date_or_month string (YYYY-MM-DD or YYYY-MM) if matched."""
+    today = today or dtdate.today()
+    s = text.strip()
+
+    # Pattern 1: numeric N units
+    m = _REM_PATTERNS[0].search(s)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2).lower()
+        return _offset_to_target(today, n, unit)
+
+    # Pattern 2: word-number units
+    m = _REM_PATTERNS[1].search(s)
+    if m:
+        n = _WORD_NUMS.get(m.group(1).lower(), 1)
+        unit = m.group(2).lower()
+        return _offset_to_target(today, n, unit)
+
+    # Pattern 3: ISO date
+    m = _REM_PATTERNS[2].search(s)
+    if m:
+        try:
+            return dtdate.fromisoformat(m.group(1)).isoformat()
+        except ValueError:
+            pass
+
+    # Pattern 4: "next week/month"
+    m = _REM_PATTERNS[3].search(s)
+    if m:
+        unit = m.group(1).lower()
+        return _offset_to_target(today, 1, unit)
+
+    return None
+
+
+def _offset_to_target(today: dtdate, n: int, unit: str) -> str:
+    if unit.startswith("day"):
+        return (today + timedelta(days=n)).isoformat()
+    if unit.startswith("week"):
+        return (today + timedelta(weeks=n)).isoformat()
+    if unit.startswith("month"):
+        # Naive month offset: add n*30 days for simplicity, then return YYYY-MM.
+        target = today + timedelta(days=30 * n)
+        return target.strftime("%Y-%m")
+    return today.isoformat()
+
+
+def _persist_reminder(user_id: int, target: str, source_text: str) -> int:
+    conn = get_conn()
+    cur = conn.execute(
+        """INSERT INTO FutureVisitReminder(user_id, doctor_id, target_date_or_month, notified)
+           VALUES(?, NULL, ?, 0)""",
+        (user_id, target),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
 # ---------- public entry point ----------
 
-def handle(user_id: int, user_text: str) -> ChatResult:
+def handle(user_id: int, user_text: str, preferred_language: str = "en") -> ChatResult:
     user_text = (user_text or "").strip()
     if not user_text:
         return ChatResult(reply="(empty message)", route="general", extracted={})
@@ -220,6 +297,22 @@ def handle(user_id: int, user_text: str) -> ChatResult:
             emergency=decision,
         )
 
+    # Tier-3: rule-based reminder detection before the LLM call.
+    target = detect_reminder(user_text)
+    if target is not None:
+        rid = _persist_reminder(user_id, target, user_text)
+        reply_en = (
+            f"Got it — I've saved a reminder for around {target}. "
+            f"Use 'Check my reminders' in the sidebar when you'd like to be pinged."
+        )
+        reply = translate_dynamic(reply_en, preferred_language) if preferred_language != "en" else reply_en
+        _persist_message(user_id, "assistant", reply)
+        return ChatResult(
+            reply=reply,
+            route="reminder",
+            extracted={"reminder_id": rid, "target": target},
+        )
+
     history = load_history(user_id, limit=10)
     transcript = _format_transcript(history[:-1])  # exclude the message we just inserted
 
@@ -229,5 +322,10 @@ def handle(user_id: int, user_text: str) -> ChatResult:
     except Exception:
         out = RouterOutput(route="general", reply=parsed.get("reply", "How can I help?"), extracted={})
 
-    _persist_message(user_id, "assistant", out.reply)
-    return ChatResult(reply=out.reply, route=out.route, extracted=out.extracted)
+    # Tier-3: translate the assistant reply if user prefers Si/Ta.
+    final_reply = out.reply
+    if preferred_language != "en" and final_reply:
+        final_reply = translate_dynamic(final_reply, preferred_language)
+
+    _persist_message(user_id, "assistant", final_reply)
+    return ChatResult(reply=final_reply, route=out.route, extracted=out.extracted)

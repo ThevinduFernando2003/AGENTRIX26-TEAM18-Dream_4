@@ -26,6 +26,24 @@ data**, labelled in the UI and the seed files.
 - Medicine Tracker (text-input) — pharmacy comparison by total cost
   and distance (live browser geolocation, manual entry fallback)
 
+## Tier 3 scope
+- **Sinhala / Tamil / English UI** — a static `i18n` catalog covers
+  every visible label; the user's preferred language flips it.
+- **Voice input** — Gemini `gemini-1.5-flash` speech-to-text via
+  `st.audio_input`. Disabled gracefully when `GEMINI_API_KEY` is
+  absent.
+- **Voice output** — gTTS (free, no API key) plays each assistant
+  reply in the user's preferred language when the sidebar toggle is on.
+- **Free-form reply translation** — when the user prefers Sinhala or
+  Tamil, the chatbot's English reply is translated via Gemini before
+  persistence. Cached per process to spare the free-tier quota.
+- **Future-visit reminders** — rule-based regex inside the chatbot
+  detects "come back in 2 weeks / next month / on YYYY-MM-DD",
+  persists a `FutureVisitReminder` row. Sidebar **🔔 Check my
+  reminders** button finds rows due within 7 days and fires an ntfy
+  push per reminder; `notified=1` flips on success, idempotent on
+  re-click.
+
 ## Tier 2 scope
 - **Specialist Panel** — three CrewAI agents (cardiology, internal
   medicine, radiology) read the SAME report **independently**. Each
@@ -135,6 +153,29 @@ After `streamlit run`:
     flow falls back to deterministic stub opinions. The disagreement
     guard still fires.
 
+### Tier-3 demo additions
+
+13. Log in as a seeded Sinhala/Tamil user (`demo3` / `demo3pass` for
+    Sinhala, `demo4` / `demo4pass` for Tamil). Sidebar, title and
+    most labels flip to that language. Chat replies are translated
+    via Gemini when an API key is set; without a key, the English
+    reply is shown unchanged.
+14. Chat: `"Doctor asked me to come back in 2 weeks"` → rule-based
+    detector fires **before** the LLM, the assistant acknowledges
+    in the user's language, and a `FutureVisitReminder` row appears
+    in SQLite with `target_date_or_month` ≈ today + 14 days.
+15. Sidebar → **🔔 Check my reminders**. Within 7 days → button to
+    push appears. Click → ntfy push fires, `notified=1`, log row in
+    `NotificationLog`. Re-click → 0 sent (idempotent).
+16. Toggle **🔊 Speak assistant replies** on. The next assistant
+    reply gets an inline mp3 audio widget — Sinhala / Tamil / English
+    voiced via gTTS.
+17. Open **🎙️ Voice input** (with `GEMINI_API_KEY` set), record a
+    short clip in your preferred language, click **Transcribe &
+    send**. The text appears as if you'd typed it; the chatbot
+    handles it normally. Without a key, the expander shows a clear
+    "voice input unavailable" message.
+
 ---
 
 ## Folder layout
@@ -142,13 +183,18 @@ After `streamlit run`:
 ```
 project/
 ├── agents/
-│   ├── basic_chatbot.py     # CrewAI orchestrator + memory
+│   ├── basic_chatbot.py     # CrewAI orchestrator + memory + reminder regex
 │   ├── booking_agent.py     # Pydantic-typed booking with alternatives
 │   ├── medicine_tracker.py  # Text-input + OCR-confirm pharmacy comparison
 │   ├── emergency.py         # Pure-regex screen — no LLM
 │   ├── specialist_panel.py  # 3 independent CrewAI specialists (Tier 2)
 │   ├── moderator.py         # Consensus + structural disagreement guard
-│   └── vision_ocr.py        # Gemini Vision prescription OCR helper
+│   ├── vision_ocr.py        # Gemini Vision prescription OCR helper
+│   └── reminders.py         # Due-window + ntfy push (Tier 3)
+├── i18n/
+│   ├── translate.py         # Static catalog + Gemini dynamic translation
+│   ├── tts.py               # gTTS wrapper
+│   └── stt.py               # Gemini speech-to-text
 ├── db/
 │   ├── schema.sql           # 17 tables
 │   ├── db.py                # get_conn(), init_db()

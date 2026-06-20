@@ -37,15 +37,22 @@ from project.agents import (  # noqa: E402
     booking_agent,
     medicine_tracker,
     moderator,
+    reminders,
     specialist_panel,
     vision_ocr,
 )
+from project.i18n.translate import t  # noqa: E402
+from project.i18n import stt, tts  # noqa: E402
 from project.notifications.ntfy_client import send as ntfy_send, topic_for_user  # noqa: E402
 
-DISCLAIMER = (
-    "_This is an AI-generated observation, not a medical diagnosis. "
-    "Please consult a licensed physician or pharmacist._"
-)
+def _lang() -> str:
+    u = current_user() or {}
+    return u.get("preferred_language", "en") or "en"
+
+
+def _disclaimer() -> str:
+    return t("disclaimer.footer", _lang())
+
 
 _SAMPLE_REPORTS_DIR = _ROOT / "project" / "kb" / "sample_reports"
 
@@ -68,22 +75,20 @@ def _get_geo() -> tuple[float | None, float | None]:
 
 
 def _render_sidebar(user: dict) -> None:
+    lang = user.get("preferred_language", "en") or "en"
     with st.sidebar:
         st.markdown(f"### 👤 {user.get('full_name') or user['username']}")
-        st.caption(f"Language: {user.get('preferred_language', 'en')}")
+        st.caption(f"Language: {lang}")
 
-        st.warning("Demo build — all facility, doctor, slot, pharmacy and price data is SEED / MOCK data.")
+        st.warning(t("sidebar.mock_banner", lang))
 
         topic = topic_for_user(user["user_id"])
-        st.markdown("**Family-alert push topic**")
+        st.markdown(f"**{t('sidebar.topic_label', lang)}**")
         st.code(topic, language="text")
-        st.caption(
-            f"Family subscribes at https://ntfy.sh/{topic} (free, no signup) to get "
-            "emergency notifications."
-        )
+        st.caption(t("sidebar.topic_caption", lang, topic=topic))
 
         st.divider()
-        st.markdown("**Your location** (for pharmacy distance)")
+        st.markdown(f"**{t('sidebar.location', lang)}**")
         try:
             from streamlit_geolocation import streamlit_geolocation  # type: ignore
             geo_val = streamlit_geolocation()
@@ -98,15 +103,40 @@ def _render_sidebar(user: dict) -> None:
         else:
             st.info("Click the 📍 button above, or enter coordinates manually:")
 
-        with st.expander("Enter coordinates manually"):
+        with st.expander(t("sidebar.location_manual", lang)):
             m_lat = st.number_input("Latitude",  value=6.9271, format="%.6f")
             m_lng = st.number_input("Longitude", value=79.8612, format="%.6f")
-            if st.button("Use these coordinates"):
+            if st.button(t("sidebar.use_coords", lang)):
                 st.session_state["manual_geo"] = {"lat": m_lat, "lng": m_lng}
                 st.rerun()
 
         st.divider()
-        if st.button("Log out"):
+        # Tier-3: TTS toggle.
+        st.session_state["tts_on"] = st.toggle(
+            t("sidebar.tts_toggle", lang),
+            value=st.session_state.get("tts_on", False),
+        )
+
+        # Tier-3: reminder check button.
+        if st.button(t("sidebar.reminders_btn", lang), use_container_width=True):
+            due = reminders.due_within(user["user_id"], days=7)
+            if not due:
+                st.info(t("sidebar.reminders_none", lang))
+            else:
+                st.session_state["pending_reminders"] = [r["reminder_id"] for r in due]
+                st.session_state["pending_reminders_count"] = len(due)
+
+        pending_ids = st.session_state.get("pending_reminders")
+        if pending_ids:
+            count = st.session_state.get("pending_reminders_count", len(pending_ids))
+            if st.button(t("sidebar.reminders_send", lang, n=count), type="primary", use_container_width=True):
+                sent = reminders.fire(user["user_id"], pending_ids)
+                st.success(t("sidebar.reminders_sent", lang, n=sent))
+                st.session_state.pop("pending_reminders", None)
+                st.session_state.pop("pending_reminders_count", None)
+
+        st.divider()
+        if st.button(t("sidebar.logout", lang)):
             logout()
             st.rerun()
 
@@ -117,7 +147,8 @@ def _render_emergency_panel(user: dict) -> None:
     em = st.session_state.get("pending_emergency")
     if not em:
         return
-    st.error("🚨 **Possible medical emergency detected**")
+    lang = _lang()
+    st.error(f"**{t('em.title', lang)}**")
     st.markdown(f"**Triggered by:** {', '.join(em.get('matched_terms', []))}")
     st.markdown(
         "If you confirm, MedBridge AI will show a tap-to-call link for Sri Lanka emergency "
@@ -127,7 +158,7 @@ def _render_emergency_panel(user: dict) -> None:
 
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("✅ Yes, this is an emergency", type="primary", use_container_width=True):
+        if st.button(t("em.confirm", lang), type="primary", use_container_width=True):
             st.session_state["emergency_confirmed"] = True
             topic = topic_for_user(user["user_id"])
             ok = ntfy_send(
@@ -151,7 +182,7 @@ def _render_emergency_panel(user: dict) -> None:
             )
             st.rerun()
     with c2:
-        if st.button("❌ No, false alarm", use_container_width=True):
+        if st.button(t("em.dismiss", lang), use_container_width=True):
             st.session_state.pop("pending_emergency", None)
             from project.agents.basic_chatbot import _persist_message
             _persist_message(
@@ -163,13 +194,13 @@ def _render_emergency_panel(user: dict) -> None:
     if st.session_state.get("emergency_confirmed"):
         st.markdown("---")
         st.link_button(
-            "📞  Call 1990 now (Suwa Seriya Ambulance)",
+            t("em.call_btn", lang),
             "tel:1990",
             type="primary",
             use_container_width=True,
         )
         if st.session_state.get("emergency_push_ok"):
-            st.success(f"Family contact notified at {datetime.now().strftime('%H:%M:%S')} via ntfy.sh.")
+            st.success(f"{t('em.family_notified', lang)} ({datetime.now().strftime('%H:%M:%S')})")
         else:
             st.warning("Family push notification could not be sent (logged regardless). Please call 1990.")
         if st.button("Dismiss and continue chatting"):
@@ -177,7 +208,7 @@ def _render_emergency_panel(user: dict) -> None:
                 st.session_state.pop(k, None)
             st.rerun()
 
-    st.markdown(DISCLAIMER)
+    st.markdown(_disclaimer())
 
 
 # ---------- booking panel ----------
@@ -235,7 +266,7 @@ def _render_pending_booking(user: dict) -> None:
     if st.button("Dismiss booking suggestions"):
         st.session_state.pop("pending_booking", None)
         st.rerun()
-    st.markdown(DISCLAIMER)
+    st.markdown(_disclaimer())
 
 
 # ---------- report review panel (Tier 2) ----------
@@ -248,7 +279,8 @@ def _list_sample_reports() -> list[Path]:
 
 def _render_report_review(user: dict) -> None:
     expanded = st.session_state.pop("open_report_panel", False)
-    with st.expander("📄 Specialist Panel report review", expanded=expanded):
+    lang = _lang()
+    with st.expander(t("panel.report.title", lang), expanded=expanded):
         st.caption(
             "Three independent specialists (cardiology, internal medicine, "
             "radiology) each read the SAME report without seeing each other's "
@@ -275,7 +307,7 @@ def _render_report_review(user: dict) -> None:
             placeholder="Paste the full report text here…",
         )
 
-        if st.button("Run Specialist Panel", type="primary", key="rr_run"):
+        if st.button(t("panel.report.run", lang), type="primary", key="rr_run"):
             text = ""
             source = ""
             if sample_choice and sample_choice != "— none —":
@@ -365,7 +397,7 @@ def _render_report_review(user: dict) -> None:
 
             st.caption(cons["disclaimer"])
 
-        st.markdown(DISCLAIMER)
+        st.markdown(_disclaimer())
 
 
 # ---------- prescription OCR panel (Tier 2) ----------
@@ -450,7 +482,7 @@ def _render_prescription_panel(user: dict) -> None:
                     st.session_state.pop("pending_rx", None)
                     st.rerun()
 
-        st.markdown(DISCLAIMER)
+        st.markdown(_disclaimer())
 
 
 # ---------- medicine panel ----------
@@ -483,7 +515,7 @@ def _render_pending_medicine() -> None:
     if st.button("Dismiss medicine results"):
         st.session_state.pop("pending_medicine", None)
         st.rerun()
-    st.markdown(DISCLAIMER)
+    st.markdown(_disclaimer())
 
 
 # ---------- main ----------
@@ -495,8 +527,9 @@ def main() -> None:
 
     _render_sidebar(user)
 
-    st.title("🩺 MedBridge AI")
-    st.caption("Multi-agent healthcare navigator — Tier 1 demo (Team Dream_4 · AgenTrix 2026)")
+    lang = user.get("preferred_language", "en") or "en"
+    st.title(t("app.title", lang))
+    st.caption(t("app.caption", lang))
 
     # Show any active in-progress panels first so they're not buried under chat.
     _render_emergency_panel(user)
@@ -511,11 +544,25 @@ def main() -> None:
         with st.chat_message(h["role"] if h["role"] in ("user", "assistant") else "assistant"):
             st.markdown(h["content"])
 
-    user_text = st.chat_input("Describe your symptoms, or ask to book an appointment or check medicine prices…")
+    # ----- Tier-3 voice input -----
+    with st.expander(t("chat.voice_expander", lang), expanded=False):
+        if not stt.is_available():
+            st.info(t("chat.voice_unavail", lang))
+        audio = st.audio_input("🎙️", key="voice_in")
+        if audio is not None and st.button(t("chat.voice_transcribe", lang), key="voice_send"):
+            mime = getattr(audio, "type", None) or "audio/wav"
+            transcript = stt.transcribe(audio.read(), lang=lang, mime=mime)
+            if transcript:
+                st.session_state["_queued_user_text"] = transcript
+                st.rerun()
+            else:
+                st.warning("Could not transcribe — please try again or type.")
+
+    user_text = st.session_state.pop("_queued_user_text", None) or st.chat_input(t("chat.placeholder", lang))
     if user_text:
         with st.chat_message("user"):
             st.markdown(user_text)
-        result = basic_chatbot.handle(user["user_id"], user_text)
+        result = basic_chatbot.handle(user["user_id"], user_text, preferred_language=lang)
 
         if result.route == "emergency":
             st.session_state["pending_emergency"] = {
@@ -527,6 +574,11 @@ def main() -> None:
         if result.reply:
             with st.chat_message("assistant"):
                 st.markdown(result.reply)
+                # Tier-3: speak the reply when toggle is on.
+                if st.session_state.get("tts_on"):
+                    audio_bytes = tts.speak(result.reply, lang=lang)
+                    if audio_bytes:
+                        st.audio(audio_bytes, format="audio/mp3")
 
         if result.route == "booking":
             ctx = booking_agent.BookingContext(user_id=user["user_id"], extracted=result.extracted)
@@ -561,7 +613,7 @@ def main() -> None:
 
     # Footer disclaimer always visible.
     st.markdown("---")
-    st.markdown(DISCLAIMER)
+    st.markdown(_disclaimer())
 
 
 if __name__ == "__main__":
