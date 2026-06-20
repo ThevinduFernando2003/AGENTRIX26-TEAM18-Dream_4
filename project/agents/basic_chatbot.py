@@ -34,13 +34,18 @@ _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 # ---------- persistence helpers ----------
 
-def _persist_message(user_id: int, role: str, content: str) -> None:
+def persist_message(user_id: int, role: str, content: str) -> None:
+    """Append a chat turn to ChatMessage. Public entry point used by UI panels."""
     conn = get_conn()
     conn.execute(
         "INSERT INTO ChatMessage(user_id, role, content) VALUES(?,?,?)",
         (user_id, role, content),
     )
     conn.commit()
+
+
+# Back-compat alias for existing internal callers.
+_persist_message = persist_message
 
 
 def load_history(user_id: int, limit: int = 10) -> list[dict]:
