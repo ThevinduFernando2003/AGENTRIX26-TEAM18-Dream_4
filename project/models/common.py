@@ -1,6 +1,4 @@
-"""Shared Literal types used across multiple model modules."""
-
-from __future__ import annotations
+"""Common types shared across all models."""
 
 from typing import Literal
 

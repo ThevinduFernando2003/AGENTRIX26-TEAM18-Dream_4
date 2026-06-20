@@ -1,6 +1,4 @@
-"""Chat + emergency screening + router output models."""
-
-from __future__ import annotations
+"""Chat-related Pydantic models."""
 
 from typing import Literal, Optional
 
@@ -23,7 +21,6 @@ class EmergencyDecision(BaseModel):
 
 class RouterOutput(BaseModel):
     """JSON-mode output from the basic chatbot orchestrator."""
-
     route: INTENT
     reply: str
     extracted: dict = Field(default_factory=dict)

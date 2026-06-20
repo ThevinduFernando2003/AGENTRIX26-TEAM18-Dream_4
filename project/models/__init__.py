@@ -1,49 +1,57 @@
-"""Models package — back-compat shim.
+"""MedBridge AI models package.
 
-Re-exports every model so existing
-`from project.models import X` / `from ..models import X` imports keep
-working unchanged. Add new models to the appropriate submodule
-(chat/booking/medicine/panel/common) and extend `__all__` below.
+This package is split by domain for parallel, non-overlapping development:
+- common.py: shared type definitions (INTENT, SPECIALIST, etc.)
+- chat.py: chat/routing models (owned by Janidu)
+- booking.py: booking models (owned by Thevindu)
+- medicine.py: medicine/pharmacy models (owned by Nisal)
+- panel.py: specialist panel/report models (owned by Chanupa)
+
+For backward compatibility, all models are re-exported here.
 """
 
+from .chat import ChatTurn, EmergencyDecision, RouterOutput
 from .booking import (
+    BookingRequest,
     AlternativeSlot,
     BookingConfirmation,
-    BookingRequest,
     BookingResponse,
 )
-from .chat import ChatTurn, EmergencyDecision, RouterOutput
-from .common import INTENT, SPECIALIST
 from .medicine import (
-    MedicinePriceItem,
     MedicineQuery,
-    MedicineQuoteResult,
-    OcrConfirmation,
+    MedicinePriceItem,
     PharmacyQuote,
+    MedicineQuoteResult,
 )
-from .panel import ConsensusReport, PanelResult, SpecialistOpinion
+from .panel import (
+    SpecialistOpinion,
+    ConsensusReport,
+    PanelResult,
+    OcrConfirmation,
+)
+from .common import INTENT, SPECIALIST
 
 __all__ = [
-    # common
+    # Common
     "INTENT",
     "SPECIALIST",
-    # chat
+    # Chat
     "ChatTurn",
     "EmergencyDecision",
     "RouterOutput",
-    # booking
+    # Booking
     "BookingRequest",
     "AlternativeSlot",
     "BookingConfirmation",
     "BookingResponse",
-    # medicine
+    # Medicine
     "MedicineQuery",
     "MedicinePriceItem",
     "PharmacyQuote",
     "MedicineQuoteResult",
-    "OcrConfirmation",
-    # panel
+    # Panel
     "SpecialistOpinion",
     "ConsensusReport",
     "PanelResult",
+    "OcrConfirmation",
 ]
