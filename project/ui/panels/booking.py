@@ -106,11 +106,12 @@ def render(user: dict) -> None:
                         notif_type="booking_confirmed",
                     )
 
-                    # Persist confirmation to chat history
+                    # Persist confirmation to chat history (in the active thread)
                     persist_message(
                         user["user_id"], "assistant",
                         f"Appointment confirmed: {conf.doctor_name} at {conf.facility_name} on "
                         f"{conf.date} {conf.time}. (Appointment #{conf.appointment_id})",
+                        conversation_id=st.session_state.get("active_conversation_id"),
                     )
 
                     # Clean up session state and show success

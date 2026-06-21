@@ -9,6 +9,11 @@ secondaryBackgroundColor = "#ffffff" # white — sidebar, cards, tables lift off
 textColor = "#0f172a"                # slate-900
 font = "sans serif"
 
+[client]
+# Hide the developer chrome (Deploy button, Rerun / Clear cache / Record screen
+# menu) — it's meaningless to demo users. "minimal" keeps only essential items.
+toolbarMode = "minimal"
+
 [server]
 # Keep uploads modest — the demo only ever ingests small report/prescription files.
 maxUploadSize = 10

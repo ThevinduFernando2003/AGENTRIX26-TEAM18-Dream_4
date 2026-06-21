@@ -94,6 +94,16 @@ def update_preferred_language(user_id: int, lang: str) -> None:
     conn.commit()
 
 
+def update_family_contact(user_id: int, name: str, phone: str) -> None:
+    """Persist the family contact (used for the emergency push) for the given user."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE User SET family_contact_name = ?, family_contact_phone = ? WHERE user_id = ?",
+        (name or None, phone or None, user_id),
+    )
+    conn.commit()
+
+
 def invalidate_user_cache() -> None:
     """Drop the cached user dict so the next ``current_user()`` reloads from DB.
 

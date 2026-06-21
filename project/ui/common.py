@@ -6,6 +6,8 @@ geolocation, language, and disclaimer logic instead of duplicating it.
 
 from __future__ import annotations
 
+import math
+
 import streamlit as st
 
 from ..i18n.translate import t
@@ -16,6 +18,42 @@ LANGUAGE_SHORT_LABELS = {
     "si": "සි",
     "ta": "த",
 }
+
+# Approximate centres of major Sri Lankan cities. Used to (a) let the user pick a
+# city instead of typing raw lat/long, and (b) show the nearest city label instead
+# of bare coordinates. Distance maths still uses the coordinates under the hood.
+SRI_LANKA_CITIES: dict[str, tuple[float, float]] = {
+    "Colombo": (6.9271, 79.8612),
+    "Dehiwala-Mount Lavinia": (6.8409, 79.8653),
+    "Moratuwa": (6.7730, 79.8816),
+    "Sri Jayawardenepura Kotte": (6.8880, 79.9180),
+    "Negombo": (7.2083, 79.8358),
+    "Gampaha": (7.0917, 79.9990),
+    "Kalutara": (6.5854, 79.9607),
+    "Kandy": (7.2906, 80.6337),
+    "Galle": (6.0535, 80.2210),
+    "Matara": (5.9485, 80.5353),
+    "Kurunegala": (7.4863, 80.3623),
+    "Anuradhapura": (8.3114, 80.4037),
+    "Ratnapura": (6.6828, 80.3992),
+    "Badulla": (6.9934, 81.0550),
+    "Batticaloa": (7.7102, 81.6924),
+    "Trincomalee": (8.5874, 81.2152),
+    "Jaffna": (9.6615, 80.0255),
+    "Nuwara Eliya": (6.9497, 80.7891),
+}
+
+
+def nearest_city(lat: float, lng: float) -> str:
+    """Return the name of the closest known city to a coordinate (great-circle)."""
+    def _dist(c: tuple[float, float]) -> float:
+        (la, lo) = c
+        p1, p2 = math.radians(lat), math.radians(la)
+        dp, dl = math.radians(la - lat), math.radians(lo - lng)
+        a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+        return 2 * 6371.0 * math.asin(math.sqrt(a))
+
+    return min(SRI_LANKA_CITIES, key=lambda name: _dist(SRI_LANKA_CITIES[name]))
 
 
 def render_branding_styles() -> None:
