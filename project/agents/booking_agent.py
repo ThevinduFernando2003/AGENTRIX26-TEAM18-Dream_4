@@ -181,6 +181,11 @@ def book(user_id: int, slot_id: int) -> BookingConfirmation | None:
 
 _TIME_RE = re.compile(r"(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
 
+_WEEKDAYS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
 
 def parse_date(raw: str | None, today: dtdate | None = None) -> str | None:
     if not raw:
@@ -195,6 +200,12 @@ def parse_date(raw: str | None, today: dtdate | None = None) -> str | None:
         m = re.match(r"in (\d+) day", s)
         if m:
             return (today + timedelta(days=int(m.group(1)))).isoformat()
+    # Weekday phrases ("tuesday", "next tuesday", "on friday") → next future
+    # occurrence of that weekday (same-day name resolves to a week out, not today).
+    for name, wd in _WEEKDAYS.items():
+        if name in s:
+            ahead = (wd - today.weekday()) % 7 or 7
+            return (today + timedelta(days=ahead)).isoformat()
     # ISO YYYY-MM-DD
     try:
         return dtdate.fromisoformat(s).isoformat()
@@ -239,6 +250,7 @@ def parse_time(raw: str | None) -> str | None:
 class BookingContext:
     user_id: int
     extracted: dict
+    raw_text: str = ""  # the patient's verbatim request, passed to the LLM agent
 
 
 def process(ctx: BookingContext) -> BookingResponse:
@@ -410,13 +422,17 @@ def _get_booking_agent():
         return None
 
 
-def _agent_prompt(extracted: dict) -> str:
+def _agent_prompt(ctx: BookingContext) -> str:
     parts = []
     for key in ("doctor_name", "specialty", "date", "time"):
-        if extracted.get(key):
-            parts.append(f"{key}: {extracted[key]}")
+        if ctx.extracted.get(key):
+            parts.append(f"{key}: {ctx.extracted[key]}")
     detail = "; ".join(parts) if parts else "(no structured fields extracted)"
-    return f"Patient booking request — {detail}. Find and propose available slots."
+    # Hand the agent the verbatim request too, so it can read dates/doctors the
+    # heuristic extractor missed (e.g. "next Tuesday morning with a heart doctor").
+    raw = (ctx.raw_text or "").strip()
+    extra = f'\nPatient said verbatim: "{raw}"' if raw else ""
+    return f"Patient booking request — {detail}.{extra} Find and propose available slots."
 
 
 def process_agentic(ctx: BookingContext) -> BookingResponse:
@@ -434,7 +450,7 @@ def process_agentic(ctx: BookingContext) -> BookingResponse:
         # genuinely ran through the Pydantic AI agent (not the deterministic path).
         logger.info("Booking via Pydantic AI agent (model=%s)", _GEMINI_MODEL)
         result = agent.run_sync(
-            _agent_prompt(ctx.extracted),
+            _agent_prompt(ctx),
             deps=BookingDeps(user_id=ctx.user_id),
             model_settings={"timeout": _AGENT_TIMEOUT_S},
             usage_limits=UsageLimits(request_limit=_AGENT_REQUEST_LIMIT),

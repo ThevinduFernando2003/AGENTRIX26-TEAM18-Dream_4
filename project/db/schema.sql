@@ -16,14 +16,27 @@ CREATE TABLE IF NOT EXISTS User (
     created_at           TEXT DEFAULT (datetime('now'))
 );
 
+-- A chat "thread" (ChatGPT-style). Messages belong to one conversation so the
+-- sidebar can list past chats and start new ones.
+CREATE TABLE IF NOT EXISTS Conversation (
+    conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES User(user_id) ON DELETE CASCADE,
+    title           TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_conv_user ON Conversation(user_id, conversation_id);
+
 CREATE TABLE IF NOT EXISTS ChatMessage (
-    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL REFERENCES User(user_id) ON DELETE CASCADE,
-    role       TEXT NOT NULL CHECK (role IN ('user','assistant','system')),
-    content    TEXT NOT NULL,
-    timestamp  TEXT DEFAULT (datetime('now'))
+    message_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES User(user_id) ON DELETE CASCADE,
+    conversation_id INTEGER REFERENCES Conversation(conversation_id) ON DELETE CASCADE,
+    role            TEXT NOT NULL CHECK (role IN ('user','assistant','system')),
+    content         TEXT NOT NULL,
+    timestamp       TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_chat_user_time ON ChatMessage(user_id, timestamp);
+-- idx_chat_conversation is created in db._migrate(), AFTER the conversation_id
+-- column is guaranteed to exist (it's absent on DBs created before this change).
 
 CREATE TABLE IF NOT EXISTS MedicalReport (
     report_id   INTEGER PRIMARY KEY AUTOINCREMENT,

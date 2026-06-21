@@ -14,7 +14,6 @@ never be omitted by a wonky generation.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -27,6 +26,7 @@ from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
 from ..rag import retrieve
 from . import emergency
+from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.chatbot")
 
@@ -36,12 +36,14 @@ _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 # ---------- persistence helpers ----------
 
 
-def persist_message(user_id: int, role: str, content: str) -> None:
+def persist_message(
+    user_id: int, role: str, content: str, conversation_id: int | None = None
+) -> None:
     """Append a chat turn to ChatMessage. Public entry point used by UI panels."""
     conn = get_conn()
     conn.execute(
-        "INSERT INTO ChatMessage(user_id, role, content) VALUES(?,?,?)",
-        (user_id, role, content),
+        "INSERT INTO ChatMessage(user_id, conversation_id, role, content) VALUES(?,?,?,?)",
+        (user_id, conversation_id, role, content),
     )
     conn.commit()
 
@@ -50,14 +52,46 @@ def persist_message(user_id: int, role: str, content: str) -> None:
 _persist_message = persist_message
 
 
-def load_history(user_id: int, limit: int = 10) -> list[dict]:
+def load_history(
+    user_id: int, limit: int = 10, conversation_id: int | None = None
+) -> list[dict]:
+    conn = get_conn()
+    if conversation_id is not None:
+        rows = conn.execute(
+            """SELECT role, content, timestamp FROM ChatMessage
+               WHERE user_id = ? AND conversation_id = ?
+               ORDER BY message_id DESC LIMIT ?""",
+            (user_id, conversation_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT role, content, timestamp FROM ChatMessage
+               WHERE user_id = ? ORDER BY message_id DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def create_conversation(user_id: int, title: str = "") -> int:
+    """Start a new chat thread; returns its id. Title is trimmed from the first message."""
+    conn = get_conn()
+    title = (title or "New chat").strip().replace("\n", " ")[:60] or "New chat"
+    cur = conn.execute(
+        "INSERT INTO Conversation(user_id, title) VALUES(?,?)", (user_id, title)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def list_conversations(user_id: int, limit: int = 30) -> list[dict]:
+    """Most-recent-first list of the user's chat threads for the sidebar."""
     conn = get_conn()
     rows = conn.execute(
-        """SELECT role, content, timestamp FROM ChatMessage
-           WHERE user_id = ? ORDER BY message_id DESC LIMIT ?""",
+        """SELECT conversation_id, title, created_at FROM Conversation
+           WHERE user_id = ? ORDER BY conversation_id DESC LIMIT ?""",
         (user_id, limit),
     ).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    return [dict(r) for r in rows]
 
 
 def _format_transcript(history: list[dict]) -> str:
@@ -138,22 +172,9 @@ def _run_llm(user_text: str, transcript: str) -> dict | None:
             request_options={"timeout": _LLM_TIMEOUT_S},
         )
         raw = (getattr(resp, "text", "") or "").strip()
-        return _extract_json(raw)
+        return extract_first_json(raw)
     except Exception as exc:
         logger.warning("LLM router call failed (%s) — using heuristic", exc)
-        return None
-
-
-_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
-def _extract_json(raw: str) -> dict | None:
-    m = _JSON_RE.search(raw)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
         return None
 
 
@@ -334,12 +355,17 @@ def _persist_reminder(user_id: int, target: str, source_text: str) -> int:
 # ---------- public entry point ----------
 
 
-def handle(user_id: int, user_text: str, preferred_language: str = "en") -> ChatResult:
+def handle(
+    user_id: int,
+    user_text: str,
+    preferred_language: str = "en",
+    conversation_id: int | None = None,
+) -> ChatResult:
     user_text = (user_text or "").strip()
     if not user_text:
         return ChatResult(reply="(empty message)", route="general", extracted={})
 
-    _persist_message(user_id, "user", user_text)
+    _persist_message(user_id, "user", user_text, conversation_id)
 
     decision = emergency.screen(user_text)
     if decision.is_emergency:
@@ -371,14 +397,14 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
             if preferred_language != "en"
             else reply_en
         )
-        _persist_message(user_id, "assistant", reply)
+        _persist_message(user_id, "assistant", reply, conversation_id)
         return ChatResult(
             reply=reply,
             route="reminder",
             extracted={"reminder_id": rid, "target": target},
         )
 
-    history = load_history(user_id, limit=10)
+    history = load_history(user_id, limit=10, conversation_id=conversation_id)
     transcript = _format_transcript(history[:-1])  # exclude the message we just inserted
 
     # Heuristic-first routing: classify cheaply, and only spend an LLM call when the
@@ -417,5 +443,5 @@ def handle(user_id: int, user_text: str, preferred_language: str = "en") -> Chat
     if preferred_language != "en" and final_reply:
         final_reply = translate_dynamic(final_reply, preferred_language)
 
-    _persist_message(user_id, "assistant", final_reply)
+    _persist_message(user_id, "assistant", final_reply, conversation_id)
     return ChatResult(reply=final_reply, route=out.route, extracted=out.extracted)

@@ -1,12 +1,18 @@
 # MedBridge AI theme. Committed (see .gitignore) so the hosted demo is branded.
-# Refined further in the Phase 3 UI-polish pass.
+# Clean clinical palette: white cards/sidebar lifting off a soft slate canvas,
+# with a calm medical teal for primary actions.
 
 [theme]
-primaryColor = "#0d9488"            # teal-600 — buttons, accents, progress
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f1f5f9" # slate-100 — sidebar, cards, tables
-textColor = "#0f172a"               # slate-900
+primaryColor = "#0d9488"             # teal-600 — buttons, accents, progress
+backgroundColor = "#f8fafc"          # slate-50 — soft clinical canvas
+secondaryBackgroundColor = "#ffffff" # white — sidebar, cards, tables lift off the canvas
+textColor = "#0f172a"                # slate-900
 font = "sans serif"
+
+[client]
+# Hide the developer chrome (Deploy button, Rerun / Clear cache / Record screen
+# menu) — it's meaningless to demo users. "minimal" keeps only essential items.
+toolbarMode = "minimal"
 
 [server]
 # Keep uploads modest — the demo only ever ingests small report/prescription files.

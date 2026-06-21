@@ -1,26 +1,67 @@
-"""Sidebar panel: user info, mock-data banner, ntfy topic, location, language,
+"""Sidebar panel: chat threads, language, location (city), family contact,
 reminders, logout and rights notice."""
 
 from __future__ import annotations
 
 import streamlit as st
 
-from ..auth import invalidate_user_cache, logout, update_preferred_language
-from ..common import get_geo, language_short_label, render_sidebar_rights_banner
-from ...agents import reminders
+from ..auth import (
+    invalidate_user_cache,
+    logout,
+    update_family_contact,
+    update_preferred_language,
+)
+from ..common import (
+    SRI_LANKA_CITIES,
+    get_geo,
+    language_short_label,
+    nearest_city,
+    render_sidebar_rights_banner,
+)
+from ...agents import basic_chatbot, reminders
 from ...i18n.translate import t
-from ...notifications.ntfy_client import topic_for_user
 
 _LANG_OPTIONS = ["en", "si", "ta"]
+
+# Panel state that belongs to a chat thread — cleared when a new chat starts.
+_THREAD_STATE_KEYS = ("pending_booking", "pending_medicine", "pending_rx", "route_request")
+
+
+def _render_conversations(user: dict, lang: str) -> None:
+    """ChatGPT-style: a New-chat button + the user's past threads."""
+    if st.button("➕ " + t("sidebar.new_chat", lang), use_container_width=True, key="new_chat"):
+        st.session_state["active_conversation_id"] = None
+        for k in _THREAD_STATE_KEYS:
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    convs = basic_chatbot.list_conversations(user["user_id"])
+    if not convs:
+        return
+    st.caption(t("sidebar.chats", lang))
+    active = st.session_state.get("active_conversation_id")
+    for c in convs:
+        title = c["title"] or t("sidebar.untitled_chat", lang)
+        label = ("🟢 " if c["conversation_id"] == active else "💬 ") + title
+        if st.button(label, key=f"conv_{c['conversation_id']}", use_container_width=True):
+            st.session_state["active_conversation_id"] = c["conversation_id"]
+            for k in _THREAD_STATE_KEYS:
+                st.session_state.pop(k, None)
+            st.rerun()
 
 
 def render(user: dict) -> None:
     lang = user.get("preferred_language", "en") or "en"
+    uid = user["user_id"]
     with st.sidebar:
         # ---- user header ----
         st.markdown(f"### 👤 {user.get('full_name') or user['username']}")
 
+        # ---- chat threads ----
+        _render_conversations(user, lang)
+
         # ---- language switcher ----
+        st.divider()
         st.markdown(f"**{t('sidebar.language', lang)}**")
         selected_lang = st.radio(
             t("sidebar.language", lang),
@@ -32,19 +73,11 @@ def render(user: dict) -> None:
             label_visibility="collapsed",
         )
         if selected_lang != lang:
-            update_preferred_language(user["user_id"], selected_lang)
+            update_preferred_language(uid, selected_lang)
             invalidate_user_cache()
             st.rerun()
 
-        st.warning(t("sidebar.mock_banner", lang))
-
-        # ---- ntfy topic ----
-        topic = topic_for_user(user["user_id"])
-        st.markdown(f"**{t('sidebar.topic_label', lang)}**")
-        st.code(topic, language="text")
-        st.caption(t("sidebar.topic_caption", lang, topic=topic))
-
-        # ---- location ----
+        # ---- location (city, not raw coordinates) ----
         st.divider()
         st.markdown(f"**{t('sidebar.location', lang)}**")
         try:
@@ -53,19 +86,40 @@ def render(user: dict) -> None:
             if isinstance(geo_val, dict) and geo_val.get("latitude"):
                 st.session_state["geo"] = geo_val
         except Exception:
-            st.caption(t("sidebar.geo_unavail", lang))
+            pass  # component unavailable → the city picker below still works
+
+        picked = st.selectbox(
+            t("sidebar.city", lang),
+            ["—"] + list(SRI_LANKA_CITIES.keys()),
+            key="city_pick",
+        )
+        if picked != "—":
+            lat0, lng0 = SRI_LANKA_CITIES[picked]
+            st.session_state["manual_geo"] = {"lat": lat0, "lng": lng0}
 
         lat, lng = get_geo()
         if lat is not None and lng is not None:
-            st.success(f"📍 {lat:.4f}, {lng:.4f}")
+            st.success(t("sidebar.near_city", lang, city=nearest_city(lat, lng)))
         else:
-            st.info(t("sidebar.geo_prompt", lang))
+            st.caption(t("sidebar.city_prompt", lang))
 
-        with st.expander(t("sidebar.location_manual", lang)):
-            m_lat = st.number_input(t("sidebar.lat", lang),  value=6.9271, format="%.6f")
-            m_lng = st.number_input(t("sidebar.lng", lang), value=79.8612, format="%.6f")
-            if st.button(t("sidebar.use_coords", lang)):
-                st.session_state["manual_geo"] = {"lat": m_lat, "lng": m_lng}
+        # ---- family contact (used for the emergency push) ----
+        st.divider()
+        with st.expander(t("sidebar.family_contact", lang)):
+            fc_name = st.text_input(
+                t("auth.family_name", lang),
+                value=user.get("family_contact_name") or "",
+                key="fc_name",
+            )
+            fc_phone = st.text_input(
+                t("auth.family_phone", lang),
+                value=user.get("family_contact_phone") or "",
+                key="fc_phone",
+            )
+            if st.button(t("sidebar.save_family", lang), key="save_fc", use_container_width=True):
+                update_family_contact(uid, fc_name, fc_phone)
+                invalidate_user_cache()
+                st.success(t("sidebar.family_saved", lang))
                 st.rerun()
 
         # ---- TTS toggle ----
@@ -77,7 +131,7 @@ def render(user: dict) -> None:
 
         # ---- reminders ----
         if st.button(t("sidebar.reminders_btn", lang), use_container_width=True):
-            due = reminders.due_within(user["user_id"], days=7)
+            due = reminders.due_within(uid, days=7)
             if not due:
                 st.info(t("sidebar.reminders_none", lang))
             else:
@@ -87,8 +141,10 @@ def render(user: dict) -> None:
         pending_ids = st.session_state.get("pending_reminders")
         if pending_ids:
             count = st.session_state.get("pending_reminders_count", len(pending_ids))
-            if st.button(t("sidebar.reminders_send", lang, n=count), type="primary", use_container_width=True):
-                sent = reminders.fire(user["user_id"], pending_ids)
+            if st.button(
+                t("sidebar.reminders_send", lang, n=count), type="primary", use_container_width=True
+            ):
+                sent = reminders.fire(uid, pending_ids)
                 st.success(t("sidebar.reminders_sent", lang, n=sent))
                 st.session_state.pop("pending_reminders", None)
                 st.session_state.pop("pending_reminders_count", None)

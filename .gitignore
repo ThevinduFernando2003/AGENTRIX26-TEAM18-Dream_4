@@ -27,6 +27,9 @@ env/
 project/rag/chroma_store/
 chroma_store/
 
+# Runtime logs (e.g. streamlit_run.log) — generated, not source
+*.log
+
 # Editor / OS
 .vscode/
 .idea/

@@ -343,13 +343,19 @@ def confirm_prescription(
     )
 
 
-def record_text_prescription(user_id: int, text: str) -> int:
-    """Text-paste path when vision is unavailable. Auto-confirmed."""
+def start_prescription_from_text(user_id: int, text: str) -> OcrConfirmation:
+    """Paste-text entry into the confirm-gate flow (no OCR / no key needed).
+
+    Persists an *unconfirmed* text prescription and returns it so the UI shows the
+    same confirm gate as the photo path. No pharmacy lookup runs until the user
+    confirms via confirm_prescription() — identical safety contract to OCR.
+    """
+    text = (text or "").strip()
     conn = get_conn()
     cur = conn.execute(
         """INSERT INTO Prescription(user_id, input_type, ocr_text, user_confirmed)
-           VALUES(?,?,?,1)""",
-        (user_id, "text", text or ""),
+           VALUES(?,?,?,0)""",
+        (user_id, "text", text),
     )
     conn.commit()
-    return cur.lastrowid
+    return OcrConfirmation(prescription_id=cur.lastrowid, ocr_text=text, confirmed=False)
