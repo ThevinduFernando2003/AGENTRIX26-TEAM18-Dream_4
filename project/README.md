@@ -29,7 +29,7 @@ data**, labelled in the UI and the seed files.
 ## Tier 3 scope
 - **Sinhala / Tamil / English UI** — a static `i18n` catalog covers
   every visible label; the user's preferred language flips it.
-- **Voice input** — Gemini `gemini-1.5-flash` speech-to-text via
+- **Voice input** — Gemini `gemini-2.5-flash` speech-to-text via
   `st.audio_input`. Disabled gracefully when `GEMINI_API_KEY` is
   absent.
 - **Voice output** — gTTS (free, no API key) plays each assistant
@@ -82,7 +82,7 @@ Required env vars (see `project/.env.example`):
 | Variable             | Default            | Purpose                                |
 | -------------------- | ------------------ | -------------------------------------- |
 | `GEMINI_API_KEY`     | _(required)_       | Free-tier Gemini key for the chatbot   |
-| `GEMINI_MODEL`       | `gemini-1.5-flash` | Model id                               |
+| `GEMINI_MODEL`       | `gemini-2.5-flash` | Model id                               |
 | `NTFY_TOPIC_PREFIX`  | `medbridge-demo`   | Per-user topic = `{prefix}-{user_id}`  |
 
 > If `GEMINI_API_KEY` is missing, the chatbot falls back to a
