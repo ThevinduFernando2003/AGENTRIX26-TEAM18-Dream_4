@@ -19,15 +19,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
+from .. import llm as llm_provider
 from ..db.db import get_conn
 from ..models import ConsensusReport, SpecialistOpinion
 from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.moderator")
-
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 DEFAULT_DISCLAIMER = (
     "This synthesis is an AI-generated observation, not a medical diagnosis. "
@@ -95,13 +93,13 @@ def _ensure_invariants(report: ConsensusReport) -> ConsensusReport:
 
 def synthesize(opinions: list[SpecialistOpinion], report_id: int) -> ConsensusReport:
     """Call the Moderator LLM (or fall back), persist, return."""
-    if not os.environ.get("GEMINI_API_KEY"):
-        logger.info("No GEMINI_API_KEY — using stub moderator")
+    if not llm_provider.is_available():
+        logger.info("No LLM API key — using stub moderator")
         consensus = _stub_synthesis(opinions)
     else:
         try:
             from crewai import Agent, Crew, LLM, Task  # type: ignore
-            llm = LLM(model=f"gemini/{_GEMINI_MODEL}", api_key=os.environ["GEMINI_API_KEY"])
+            llm = LLM(model=llm_provider.crewai_model(), api_key=llm_provider.api_key())
             agent = Agent(
                 role="Clinical Moderator",
                 goal=(

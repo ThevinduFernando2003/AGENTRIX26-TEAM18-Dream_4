@@ -15,12 +15,12 @@ never be omitted by a wonky generation.
 from __future__ import annotations
 
 import logging
-import os
 import re
 from dataclasses import dataclass
 from datetime import date as dtdate
 from datetime import timedelta
 
+from .. import llm
 from ..db.db import get_conn
 from ..i18n.translate import translate_dynamic
 from ..models import EmergencyDecision, RouterOutput
@@ -29,8 +29,6 @@ from . import emergency
 from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.chatbot")
-
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 # ---------- persistence helpers ----------
@@ -143,15 +141,16 @@ _LLM_TIMEOUT_S = 8
 
 
 def _run_llm(user_text: str, transcript: str) -> dict | None:
-    """Classify intent + draft a reply with a single direct Gemini JSON call.
+    """Classify intent + draft a reply with a single direct JSON-mode LLM call.
 
     Replaces the former CrewAI Agent/Task/Crew router. That orchestration added
     ~5s per message and, on a rate-limited key, litellm retried 429s with backoff
     into 30-60s hangs (the perceived "stuck"). One direct call with a hard timeout
     and NO retries fails fast to the heuristic, so the UI never freezes. Returns
     None on any failure (missing key, timeout, parse error) → caller uses heuristic.
+    The backend (Gemini or OpenAI) is selected by LLM_PROVIDER via project.llm.
     """
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not llm.is_available():
         return None
     prompt = (
         _SYSTEM
@@ -161,21 +160,11 @@ def _run_llm(user_text: str, transcript: str) -> dict | None:
         + user_text
         + "\n\nReturn ONLY the JSON object."
     )
-    try:
-        import google.generativeai as genai  # type: ignore
-
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        model = genai.GenerativeModel(_GEMINI_MODEL)
-        resp = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"},
-            request_options={"timeout": _LLM_TIMEOUT_S},
-        )
-        raw = (getattr(resp, "text", "") or "").strip()
-        return extract_first_json(raw)
-    except Exception as exc:
-        logger.warning("LLM router call failed (%s) — using heuristic", exc)
+    raw = llm.generate_json(prompt, timeout_s=_LLM_TIMEOUT_S)
+    if not raw:
+        logger.warning("LLM router call failed — using heuristic")
         return None
+    return extract_first_json(raw)
 
 
 # ---------- offline / fallback router ----------

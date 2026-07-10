@@ -13,20 +13,20 @@ The Basic Chatbot has already extracted structured fields
   a `BookingResponse`.
 
 A Pydantic AI Agent wraps the same tools so a free-form natural-language
-booking request can also be handled when GEMINI_API_KEY is set. The
-deterministic path is the demo's source of truth; the LLM path is
-icing.
+booking request can also be handled when an LLM API key is set (provider
+selected by LLM_PROVIDER via project.llm). The deterministic path is the
+demo's source of truth; the LLM path is icing.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import re
 from dataclasses import dataclass
 from datetime import date as dtdate
 from datetime import datetime, timedelta
 
+from .. import llm
 from ..db.db import get_conn
 from ..models import (
     AlternativeSlot,
@@ -37,8 +37,6 @@ from ..rag import retrieve
 
 logger = logging.getLogger("medbridge.booking")
 
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-
 # Pydantic AI is imported at MODULE level (not inside the factory) on purpose.
 # The tool functions are annotated `ctx: RunContext[BookingDeps]`; under
 # `from __future__ import annotations` those hints are strings that @agent.tool
@@ -47,15 +45,15 @@ _GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 # globals → `NameError: name 'RunContext' is not defined` → the agent build threw,
 # was swallowed, and EVERY booking silently fell back to the deterministic path.
 # Hoisting them here is what makes the headline Pydantic AI agent actually run.
+# (The provider-specific model classes live in project.llm.pydantic_ai_model —
+# they are runtime values, not annotations, so lazy import is safe there.)
 try:
     from pydantic_ai import Agent, RunContext
-    from pydantic_ai.models.gemini import GeminiModel
-    from pydantic_ai.providers.google_gla import GoogleGLAProvider
     from pydantic_ai.usage import UsageLimits
 
     _PYDANTIC_AI_AVAILABLE = True
 except Exception:  # library missing/incompatible — deterministic path only
-    Agent = RunContext = GeminiModel = GoogleGLAProvider = UsageLimits = None  # type: ignore
+    Agent = RunContext = UsageLimits = None  # type: ignore
     _PYDANTIC_AI_AVAILABLE = False
 
 # Per-request wall-clock cap for the agent's tool loop, plus a hard cap on the
@@ -369,12 +367,12 @@ def _get_booking_agent():
     global _booking_agent
     if _booking_agent is not None:
         return _booking_agent
-    if not os.environ.get("GEMINI_API_KEY") or not _PYDANTIC_AI_AVAILABLE:
+    if not llm.is_available() or not _PYDANTIC_AI_AVAILABLE:
         return None
     try:
-        model = GeminiModel(
-            _GEMINI_MODEL, provider=GoogleGLAProvider(api_key=os.environ["GEMINI_API_KEY"])
-        )
+        model = llm.pydantic_ai_model()
+        if model is None:
+            return None
         agent = Agent(
             model,
             output_type=BookingResponse,
@@ -448,7 +446,7 @@ def process_agentic(ctx: BookingContext) -> BookingResponse:
     try:
         # INFO-level marker so the demo/defense can confirm in logs that booking
         # genuinely ran through the Pydantic AI agent (not the deterministic path).
-        logger.info("Booking via Pydantic AI agent (model=%s)", _GEMINI_MODEL)
+        logger.info("Booking via Pydantic AI agent (model=%s)", llm.crewai_model())
         result = agent.run_sync(
             _agent_prompt(ctx),
             deps=BookingDeps(user_id=ctx.user_id),

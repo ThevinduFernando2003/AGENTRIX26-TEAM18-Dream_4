@@ -20,16 +20,14 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor
 
+from .. import llm as llm_provider
 from ..db.db import get_conn
 from ..models import SPECIALIST, SpecialistOpinion
 from .jsonutil import extract_first_json
 
 logger = logging.getLogger("medbridge.panel")
-
-_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 
 _PERSONAS: dict[SPECIALIST, dict[str, str]] = {
@@ -87,8 +85,8 @@ def _run_one(specialty: SPECIALIST, report_text: str) -> SpecialistOpinion:
     """Build a fresh Crew per call. No shared state with other specialists."""
     persona = _PERSONAS[specialty]
 
-    if not os.environ.get("GEMINI_API_KEY"):
-        logger.info("No GEMINI_API_KEY — using stub for %s", specialty)
+    if not llm_provider.is_available():
+        logger.info("No LLM API key — using stub for %s", specialty)
         return SpecialistOpinion(
             specialist_type=specialty,
             findings=persona["stub_findings"],
@@ -98,7 +96,7 @@ def _run_one(specialty: SPECIALIST, report_text: str) -> SpecialistOpinion:
 
     try:
         from crewai import Agent, Crew, LLM, Task  # type: ignore
-        llm = LLM(model=f"gemini/{_GEMINI_MODEL}", api_key=os.environ["GEMINI_API_KEY"])
+        llm = LLM(model=llm_provider.crewai_model(), api_key=llm_provider.api_key())
         agent = Agent(
             role=persona["role"],
             goal=(
