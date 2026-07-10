@@ -91,7 +91,7 @@ MedBridge AI is a Streamlit-based conversational assistant that helps patients t
         ┌───────────▼───────────────────────────┐
         │          SQLite (project/db/app.db)   │
         │  17 tables — User, ChatMessage,       │
-        │  ChatSession, Appointment, Medicine,  │
+        │  Conversation, Appointment, Medicine, │
         │  Pharmacy, MedicalReport, …           │
         └───────────────────────────────────────┘
 ```
@@ -113,21 +113,19 @@ AGENTRIX26-TEAM18-Dream_4/
 ├── requirements-dev.txt        # dev/CI deps (pytest, ruff, black)
 │
 ├── docs/
-│   ├── rag.md                  # RAG subsystem technical reference
-│   └── BOOKING_AGENT_DESIGN.md # Pydantic AI booking agent design spec
+│   └── rag.md                  # RAG subsystem technical reference
 │
-├── tests/
+├── tests/                      # 52 offline tests — no API key needed
 │   ├── conftest.py             # shared fixtures: seeded_db, chroma_tmp, no_api_key
-│   ├── test_booking.py
-│   ├── test_medicine.py
-│   └── test_rag.py
+│   └── test_*.py               # auth, booking, chatbot, emergency, i18n, jsonutil,
+│                               # medicine, notifications, rag, reminders
 │
 └── project/
     ├── requirements.txt
     ├── __init__.py
     │
     ├── agents/
-    │   ├── basic_chatbot.py    # CrewAI orchestrator, chat sessions, reminder detection
+    │   ├── basic_chatbot.py    # Heuristic-first router + direct Gemini JSON call, chat threads, reminder detection
     │   ├── booking_agent.py    # Pydantic AI typed booking + RAG-grounded doctor lookup
     │   ├── emergency.py        # Pure-regex screener (no LLM, no network)
     │   ├── medicine_tracker.py # Pharmacy comparison, RAG fuzzy matching, OCR confirm
@@ -155,13 +153,8 @@ AGENTRIX26-TEAM18-Dream_4/
     │   ├── seed_pharmacy_prices.json
     │   └── seed_users.json
     │
-    ├── models/
-    │   ├── __init__.py         # Re-exports all models (backward compat)
-    │   ├── common.py           # Shared types: INTENT, SPECIALIST
-    │   ├── booking.py          # BookingRequest, AlternativeSlot, BookingConfirmation, BookingResponse
-    │   ├── chat.py             # ChatTurn, EmergencyDecision, RouterOutput
-    │   ├── medicine.py         # MedicineQuery, PharmacyQuote, MedicineQuoteResult, OcrConfirmation
-    │   └── panel.py            # SpecialistOpinion, ConsensusReport, PanelResult
+    ├── models.py               # ALL Pydantic models in one module (booking, chat,
+    │                           # medicine, specialist panel, shared types)
     │
     ├── notifications/
     │   └── ntfy_client.py      # HTTP POST to ntfy.sh + NotificationLog
@@ -196,8 +189,8 @@ The SQLite database (`project/db/app.db`) has 17 tables:
 | Table | Purpose |
 |---|---|
 | `User` | Accounts with bcrypt-hashed passwords, preferred language, family contact |
-| `ChatSession` | Named conversation sessions per user |
-| `ChatMessage` | Individual chat turns linked to a session |
+| `Conversation` | Named chat threads per user (ChatGPT-style) |
+| `ChatMessage` | Individual chat turns linked to a conversation |
 | `MedicalReport` | Uploaded/pasted report text |
 | `SpecialistOpinion` | One row per specialist per report |
 | `ConsensusReport` | Moderator synthesis |
@@ -376,11 +369,11 @@ Seed data includes: 5 facilities, 10+ doctors, 50+ appointment slots, 10 medicin
 | Member | Domain |
 |---|---|
 | **Chanupa** | Auth (`ui/auth.py`), emergency panel, report panel, DB schema, specialist agents, moderator, notifications, `pyproject.toml`, requirements |
-| **Thevindu** | Booking models (`models/booking.py`), booking panel (`ui/panels/booking.py`), reminder-vs-booking collision fix, UI corrections (banners, language switcher) |
-| **Nisal** | Medicine models (`models/medicine.py`), medicine panel, prescription panel, i18n fixes |
+| **Thevindu** | Booking models (in `models.py`), booking panel (`ui/panels/booking.py`), reminder-vs-booking collision fix, UI corrections (banners, language switcher) |
+| **Nisal** | Medicine models (in `models.py`), medicine panel, prescription panel, i18n fixes |
 | **Janidu** | RAG subsystem (`rag/`), chat panel (`ui/panels/chat.py`), emergency agent, `ui/app.py` routing |
 
-File ownership is documented in `OWNERS.md`.
+File ownership is documented in the panel contract (`project/ui/panels/__init__.py`).
 
 ---
 
