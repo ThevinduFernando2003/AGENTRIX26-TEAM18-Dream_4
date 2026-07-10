@@ -253,16 +253,17 @@ def process(ctx: MedicineContext) -> MedicineQuoteResult:
         )
 
     if ctx.user_lat is None or ctx.user_lng is None:
-        # Sort by total_cost only.
-        quotes.sort(key=lambda q: q.total_cost)
+        # Complete baskets first, then lowest cost — a pharmacy missing an item must
+        # never outrank a complete one just because its partial total is lower.
+        quotes.sort(key=lambda q: (len(q.missing), q.total_cost))
         return MedicineQuoteResult(
             status="no_location",
             matched_names=matched_names,
             unmatched_names=unmatched,
             quotes=quotes,
             message=(
-                "Showing prices sorted by total cost. Allow location (or enter coordinates "
-                "in the sidebar) to also rank by distance."
+                "Showing pharmacies with the complete list first, sorted by total cost. "
+                "Pick a city (or allow location) in the sidebar to also rank by distance."
             ),
         )
 
@@ -277,14 +278,21 @@ def process(ctx: MedicineContext) -> MedicineQuoteResult:
         if lat is not None and lng is not None:
             q.distance_km = round(haversine_km(ctx.user_lat, ctx.user_lng, lat, lng), 2)
 
-    # Composite sort: prefer lowest cost; tiebreak on distance.
-    quotes.sort(key=lambda q: (q.total_cost, q.distance_km if q.distance_km is not None else 9999))
+    # Composite sort: complete baskets first, then lowest cost, then distance — a
+    # pharmacy missing an item must never outrank a complete one on partial total.
+    quotes.sort(
+        key=lambda q: (
+            len(q.missing),
+            q.total_cost,
+            q.distance_km if q.distance_km is not None else 9999,
+        )
+    )
     return MedicineQuoteResult(
         status="ok",
         matched_names=matched_names,
         unmatched_names=unmatched,
         quotes=quotes,
-        message="Sorted by total cost; distance shown for each pharmacy.",
+        message="Pharmacies stocking the complete list first, sorted by total cost and distance.",
     )
 
 
