@@ -57,11 +57,22 @@ def render(user: dict) -> None:
     """
     _consume_route(user)
 
+    lang = lang_of(user)
+
+    # Success card from the previous run — without this the st.success() below is
+    # wiped by its own st.rerun() before the user ever sees it.
+    bs = st.session_state.get("booking_success")
+    if bs:
+        st.success(
+            t("panel.booking.booked", lang, doctor=bs["doctor"], date=bs["date"], time=bs["time"])
+        )
+        if st.button(t("panel.booking.dismiss", lang), key="booking_success_ok"):
+            st.session_state.pop("booking_success", None)
+            st.rerun()
+
     pb = st.session_state.get("pending_booking")
     if not pb:
         return
-
-    lang = lang_of(user)
     st.subheader(t("panel.booking.title", lang))
     st.write(translate_dynamic(pb["message"], lang))
 
@@ -114,17 +125,14 @@ def render(user: dict) -> None:
                         conversation_id=st.session_state.get("active_conversation_id"),
                     )
 
-                    # Clean up session state and show success
+                    # Clean up session state; the success card is rendered on the
+                    # next run (a st.success() here would be wiped by the rerun).
                     st.session_state.pop("pending_booking", None)
-                    st.success(
-                        t(
-                            "panel.booking.booked",
-                            lang,
-                            doctor=conf.doctor_name,
-                            date=conf.date,
-                            time=conf.time,
-                        )
-                    )
+                    st.session_state["booking_success"] = {
+                        "doctor": conf.doctor_name,
+                        "date": conf.date,
+                        "time": conf.time,
+                    }
                     st.rerun()
 
     if st.button(t("panel.booking.dismiss_all", lang), key="booking_dismiss"):
