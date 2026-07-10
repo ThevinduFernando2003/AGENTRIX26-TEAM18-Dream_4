@@ -42,5 +42,7 @@ def chroma_tmp(tmp_path, monkeypatch):
 
 @pytest.fixture
 def no_api_key(monkeypatch):
-    """Force the offline / deterministic path."""
+    """Force the offline / deterministic path regardless of LLM_PROVIDER."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
