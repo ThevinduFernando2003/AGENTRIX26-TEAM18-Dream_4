@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MedBridge AI — Architecture</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 2rem auto; max-width: 1400px; padding: 0 1rem; color: #0f172a; }
+  h1 { color: #0f766e; }
+  h2 { margin-top: 2.5rem; border-bottom: 2px solid #14b8a6; padding-bottom: .3rem; }
+  .mermaid { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin: 1rem 0; }
+  ol li { margin: .35rem 0; }
+</style>
+</head>
+<body>
+<h1>🩺 MedBridge AI — System Architecture</h1>
+<p>Open this file in a browser tab for the viva. Requires internet (Mermaid CDN).</p>
+
+<h2>1. Six-layer system view</h2>
+<pre class="mermaid">
+flowchart TB
+    subgraph CLIENT["CLIENT"]
+        direction LR
+        BROWSER["Patient browser"]
+        FAMILY["Family phone<br/>ntfy subscriber"]
+        DIALER["Phone dialer<br/>tel:1990"]
+    end
+    subgraph PRESENTATION["PRESENTATION — Streamlit (project/ui)"]
+        direction LR
+        APP["app.py<br/>thin shell + auth gate"]
+        PANELS["9 panels: sidebar · chat · emergency ·<br/>booking · medicine · report · prescription · history"]
+    end
+    subgraph AGENTS["AGENT LAYER (project/agents)"]
+        direction LR
+        ROUTER["Chat router<br/>heuristic-first"]
+        EMERG["Emergency screener<br/>pure regex — no LLM"]
+        BOOK["Booking agent<br/>Pydantic AI + typed SQL tools"]
+        MED["Medicine tracker<br/>fuzzy + RAG match"]
+        PANEL3["Specialist panel<br/>3 independent CrewAI agents"]
+        MODER["Moderator<br/>disagreement guard"]
+        OCR["Vision OCR<br/>confirm gate"]
+        REMIND["Reminders<br/>regex + push"]
+    end
+    subgraph INTEL["INTELLIGENCE LAYER"]
+        direction LR
+        LLMSW["project/llm.py<br/>LLM_PROVIDER switch"]
+        RAGR["RAG retriever<br/>offline-safe, never raises"]
+    end
+    subgraph DATA["DATA LAYER"]
+        direction LR
+        SQLITE[("SQLite — 17 tables<br/>users · bookings · prescriptions · audit")]
+        CHROMA[("ChromaDB<br/>local ONNX embeddings")]
+        KB["kb/ seed JSON<br/>labeled SEED DATA — not live"]
+    end
+    subgraph EXT["EXTERNAL (free tier)"]
+        direction LR
+        LLMAPI["LLM API<br/>Gemini 2.5 Flash / OpenAI"]
+        NTFY["ntfy.sh push"]
+        GTTS["gTTS voice out"]
+    end
+    %% Invisible node-level links pin the layer stacking (Client top → External satellite).
+    DIALER ~~~ APP
+    PANELS ~~~ EMERG
+    RAGR ~~~ KB
+    CHROMA ~~~ LLMAPI
+    SQLITE ~~~ NTFY
+
+    BROWSER --> APP --> PANELS
+    PANELS -- "route_request signal" --> AGENTS
+    ROUTER & BOOK & PANEL3 & MODER & OCR --> LLMSW --> LLMAPI
+    ROUTER & BOOK & MED --> RAGR --> CHROMA
+    AGENTS --> SQLITE
+    KB -- "idempotent seed + ingest" --> SQLITE & CHROMA
+    EMERG -.->|"no LLM, no network"| DIALER
+    REMIND & PANELS --> NTFY --> FAMILY
+    PANELS --> GTTS
+</pre>
+
+<h2>2. One chat turn (request lifecycle)</h2>
+<pre class="mermaid">
+flowchart TD
+    A["User message"] --> B["emergency.screen()<br/>pure regex — BEFORE any LLM"]
+    B -->|emergency| C["Red panel → confirm →<br/>tel:1990 + family ntfy push"]
+    B -->|clear| D{"booking intent?"}
+    D -->|no| E["detect_reminder() regex"]
+    E -->|matched| F["Persist reminder →<br/>sidebar push later"]
+    D -->|yes| G["Heuristic route"]
+    E -->|no match| G
+    G -->|"booking / medicine / report verbs"| I["Skip LLM — instant route"]
+    G -->|ambiguous| H["ONE direct LLM JSON call<br/>8 s timeout, no retries"]
+    H -->|fail| I
+    H -->|ok| I
+    I --> J["RAG grounding:<br/>symptom → specialty (never disease)"]
+    J --> K["route_request signal →<br/>domain panel runs its agent"]
+    K --> L["Agent → SQLite / RAG / push<br/>reply translated si/ta · disclaimer by UI code"]
+</pre>
+
+<h2>Say these three principles while pointing:</h2>
+<ol>
+<li><b>Emergency first</b> — 32 compiled regexes, ~32 µs per message, zero network, zero API cost (~100,000× cheaper than the LLM call it guards).</li>
+<li><b>Heuristic before LLM</b> — unambiguous intents never wait on a model; the LLM fails fast to the heuristic.</li>
+<li><b>Structural safety</b> — disclaimers, confirm gates, and atomic booking are enforced by code, not prompts.</li>
+</ol>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", flowchart: { curve: "basis" } });
+</script>
+</body>
+</html>
