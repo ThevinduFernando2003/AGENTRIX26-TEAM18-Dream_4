@@ -36,6 +36,10 @@ load_dotenv(_ROOT / ".env")  # fallback
 _SECRET_KEYS = (
     "GEMINI_API_KEY",
     "GEMINI_MODEL",
+    "LLM_PROVIDER",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
+    "OPENAI_STT_MODEL",
     "RAG_EMBED_BACKEND",
     "GEMINI_EMBED_MODEL",
     "NTFY_TOPIC_PREFIX",
