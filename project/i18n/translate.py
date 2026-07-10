@@ -13,9 +13,10 @@ wording is reviewable and never drifts.
 from __future__ import annotations
 
 import logging
-import os
 from functools import lru_cache
 from typing import Literal
+
+from .. import llm
 
 logger = logging.getLogger("medbridge.i18n")
 
@@ -138,6 +139,9 @@ CATALOG: dict[str, dict[str, str]] = {
     "sidebar.family_saved": {"en": "Family contact saved.",
                              "si": "පවුලේ සම්බන්ධතාව සුරකින ලදී.",
                              "ta": "குடும்ப தொடர்பு சேமிக்கப்பட்டது."},
+    "sidebar.family_ntfy_hint":{"en": "Family receives emergency & booking alerts by opening this link — free, no signup:",
+                             "si": "මෙම සබැඳිය විවෘත කිරීමෙන් පවුලේ අයට හදිසි සහ වෙන්කිරීම් දැනුම්දීම් ලැබේ — නොමිලේ, ලියාපදිංචිය අවශ්‍ය නැත:",
+                             "ta": "இந்த இணைப்பைத் திறப்பதன் மூலம் குடும்பத்தினர் அவசர மற்றும் முன்பதிவு அறிவிப்புகளைப் பெறுவர் — இலவசம், பதிவு தேவையில்லை:"},
     # ---- chat ----
     "app.title":            {"en": "MedBridge AI",
                              "si": "මෙඩ්බ්‍රිජ් AI",
@@ -154,9 +158,9 @@ CATALOG: dict[str, dict[str, str]] = {
     "chat.voice_transcribe":{"en": "Transcribe & send",
                              "si": "පිටපත් කර යවන්න",
                              "ta": "எழுதி அனுப்பு"},
-    "chat.voice_unavail":   {"en": "Voice input needs GEMINI_API_KEY. Type instead, or set the key.",
-                             "si": "හඬ ආදානයට GEMINI_API_KEY අවශ්‍යයි. ඒ වෙනුවට type කරන්න, හෝ යතුර සකසන්න.",
-                             "ta": "குரல் உள்ளீட்டுக்கு GEMINI_API_KEY தேவை. அதற்கு பதிலாக தட்டச்சு செய்யவும், அல்லது விசையை அமைக்கவும்."},
+    "chat.voice_unavail":   {"en": "Voice input is unavailable right now — please type your message instead.",
+                             "si": "හඬ ආදානය දැනට ලද නොහැක — කරුණාකර ඒ වෙනුවට ඔබේ පණිවිඩය type කරන්න.",
+                             "ta": "குரல் உள்ளீடு தற்போது கிடைக்கவில்லை — தயவுசெய்து உங்கள் செய்தியைத் தட்டச்சு செய்யவும்."},
     "chat.voice_failed":    {"en": "Could not transcribe — please try again or type.",
                              "si": "පිටපත් කළ නොහැකි විය — කරුණාකර නැවත උත්සාහ කරන්න හෝ type කරන්න.",
                              "ta": "எழுத்துப்படி மாற்ற முடியவில்லை — தயவுசெய்து மீண்டும் முயற்சிக்கவும் அல்லது தட்டச்சு செய்யவும்."},
@@ -227,6 +231,7 @@ CATALOG: dict[str, dict[str, str]] = {
                              "si": "(demo) නාමාවලියේ නැත: {names}",
                              "ta": "(demo) பட்டியலில் இல்லை: {names}"},
     "panel.medicine.col_pharmacy":{"en": "Pharmacy", "si": "ෆාමසිය", "ta": "மருந்தகம்"},
+    "panel.medicine.col_basket":{"en": "Has all?", "si": "සියල්ල තිබේද?", "ta": "அனைத்தும் உள்ளதா?"},
     "panel.medicine.col_address":{"en": "Address", "si": "ලිපිනය", "ta": "முகவரி"},
     "panel.medicine.col_items":{"en": "Items", "si": "අයිතම", "ta": "பொருட்கள்"},
     "panel.medicine.col_total":{"en": "Total (LKR)", "si": "එකතුව (LKR)", "ta": "மொத்தம் (LKR)"},
@@ -239,18 +244,24 @@ CATALOG: dict[str, dict[str, str]] = {
     "panel.rx.expander":    {"en": "💊 Prescription photo (OCR + confirm gate)",
                              "si": "💊 බෙහෙත් වට්ටෝරු ඡායාරූපය (OCR + තහවුරු කිරීමේ දොරටුව)",
                              "ta": "💊 மருந்துச்சீட்டு புகைப்படம் (OCR + உறுதிப்படுத்தல் வாயில்)"},
-    "panel.rx.caption":     {"en": "Upload a prescription photo. Gemini Vision will transcribe it. You MUST confirm the transcription is exactly what your prescription says before we search any pharmacy. We never invent or modify dosage text.",
-                             "si": "බෙහෙත් වට්ටෝරුවක ඡායාරූපයක් උඩුගත කරන්න. Gemini Vision එය පිටපත් කරයි. ඕනෑම ෆාමසියක් සෙවීමට පෙර, පිටපත ඔබේ වට්ටෝරුවේ ඇති දේ හරියටම බව ඔබ තහවුරු කළ යුතුය. අපි කිසි විටෙක මාත්‍රා පෙළ නිර්මාණය හෝ වෙනස් නොකරමු.",
-                             "ta": "மருந்துச்சீட்டு புகைப்படத்தைப் பதிவேற்றவும். Gemini Vision அதை எழுத்துப்படி மாற்றும். எந்த மருந்தகத்தையும் தேடுவதற்கு முன், எழுத்துப்படி மாற்றியது உங்கள் மருந்துச்சீட்டில் உள்ளதைப் போலவே உள்ளது என்பதை நீங்கள் உறுதிப்படுத்த வேண்டும். மருந்தளவு உரையை நாங்கள் ஒருபோதும் உருவாக்கவோ மாற்றவோ மாட்டோம்."},
-    "panel.rx.unavailable": {"en": "Gemini Vision is unavailable (no GEMINI_API_KEY). You can still paste your prescription text below.",
-                             "si": "Gemini Vision ලද නොහැක (GEMINI_API_KEY නැත). ඔබට තවමත් පහත ඔබේ වට්ටෝරු පෙළ අලවන්න පුළුවන.",
-                             "ta": "Gemini Vision கிடைக்கவில்லை (GEMINI_API_KEY இல்லை). கீழே உங்கள் மருந்துச்சீட்டு உரையை இன்னும் ஒட்டலாம்."},
+    "panel.rx.caption":     {"en": "You confirm the transcription before any pharmacy search — dosage text is never invented or changed.",
+                             "si": "ඕනෑම ෆාමසි සෙවීමකට පෙර පිටපත ඔබ තහවුරු කරයි — මාත්‍රා පෙළ කිසි විටෙක නිර්මාණය හෝ වෙනස් නොකෙරේ.",
+                             "ta": "எந்த மருந்தகத் தேடலுக்கும் முன் படியெடுப்பை நீங்கள் உறுதிப்படுத்துகிறீர்கள் — மருந்தளவு உரை ஒருபோதும் உருவாக்கப்படவோ மாற்றப்படவோ இல்லை."},
+    "panel.rx.step1":       {"en": "**Step 1 — Provide the prescription** (photo, sample, or pasted text)",
+                             "si": "**පියවර 1 — වට්ටෝරුව ලබා දෙන්න** (ඡායාරූපය, නියැදිය, හෝ ඇලවූ පෙළ)",
+                             "ta": "**படி 1 — மருந்துச்சீட்டை வழங்கவும்** (புகைப்படம், மாதிரி அல்லது ஒட்டிய உரை)"},
+    "panel.rx.step2":       {"en": "**Step 2 — Confirm the transcription.** Nothing is searched until you approve; the pharmacy comparison (Step 3) then appears above.",
+                             "si": "**පියවර 2 — පිටපත තහවුරු කරන්න.** ඔබ අනුමත කරන තුරු කිසිවක් සොයන්නේ නැත; ඉන්පසු ෆාමසි සංසන්දනය (පියවර 3) ඉහළින් දිස්වේ.",
+                             "ta": "**படி 2 — படியெடுப்பை உறுதிப்படுத்தவும்.** நீங்கள் ஒப்புதல் அளிக்கும் வரை எதுவும் தேடப்படாது; பின்னர் மருந்தக ஒப்பீடு (படி 3) மேலே தோன்றும்."},
+    "panel.rx.unavailable": {"en": "Photo transcription is unavailable right now — paste your prescription text below instead.",
+                             "si": "ඡායාරූප පිටපත් කිරීම දැනට ලද නොහැක — ඒ වෙනුවට පහත ඔබේ වට්ටෝරු පෙළ අලවන්න.",
+                             "ta": "புகைப்பட எழுத்துப்படி மாற்றம் தற்போது கிடைக்கவில்லை — அதற்கு பதிலாக கீழே உங்கள் மருந்துச்சீட்டு உரையை ஒட்டவும்."},
     "panel.rx.upload":      {"en": "Upload prescription photo (PNG/JPG)",
                              "si": "බෙහෙත් වට්ටෝරු ඡායාරූපය උඩුගත කරන්න (PNG/JPG)",
                              "ta": "மருந்துச்சீட்டு புகைப்படத்தைப் பதிவேற்று (PNG/JPG)"},
-    "panel.rx.transcribe":  {"en": "Transcribe with Gemini Vision",
-                             "si": "Gemini Vision සමඟ පිටපත් කරන්න",
-                             "ta": "Gemini Vision மூலம் எழுத்துப்படி மாற்று"},
+    "panel.rx.transcribe":  {"en": "Transcribe with AI vision",
+                             "si": "AI vision සමඟ පිටපත් කරන්න",
+                             "ta": "AI vision மூலம் எழுத்துப்படி மாற்று"},
     "panel.rx.spinner":     {"en": "Running OCR…",
                              "si": "OCR ක්‍රියාත්මක වෙමින්…",
                              "ta": "OCR இயங்குகிறது…"},
@@ -385,28 +396,24 @@ def t(key: str, lang: str = "en", **fmt: str) -> str:
 
 @lru_cache(maxsize=512)
 def _translate_cached(text: str, lang: str, model_id: str) -> str:
-    try:
-        import google.generativeai as genai  # type: ignore
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        model = genai.GenerativeModel(model_id)
-        prompt = (
-            f"Translate the following text to {LANG_NAMES.get(lang, lang)}. "
-            "Preserve all numbers, drug names, doctor names, and dosages exactly. "
-            "Return ONLY the translation, no commentary, no quotes.\n\n"
-            f"--- Text ---\n{text}\n--- End ---"
-        )
-        resp = model.generate_content(prompt)
-        out = (getattr(resp, "text", "") or "").strip()
-        return out or text
-    except Exception as exc:
-        logger.warning("translate_dynamic failed (%s): %s", lang, exc)
+    # model_id is part of the cache key so a provider/model switch never serves
+    # stale entries; the actual call goes through the provider-agnostic llm layer.
+    prompt = (
+        f"Translate the following text to {LANG_NAMES.get(lang, lang)}. "
+        "Preserve all numbers, drug names, doctor names, and dosages exactly. "
+        "Return ONLY the translation, no commentary, no quotes.\n\n"
+        f"--- Text ---\n{text}\n--- End ---"
+    )
+    out = llm.generate_text(prompt)
+    if not out:
+        logger.warning("translate_dynamic failed (%s) — returning English", lang)
         return text
+    return out
 
 
 def translate_dynamic(text: str, lang: str) -> str:
     if not text or lang == "en":
         return text
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not llm.is_available():
         return text
-    model_id = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-    return _translate_cached(text, lang, model_id)
+    return _translate_cached(text, lang, llm.crewai_model())
