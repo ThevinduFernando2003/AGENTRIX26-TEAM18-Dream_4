@@ -20,6 +20,7 @@ from ..common import (
 )
 from ...agents import basic_chatbot, reminders
 from ...i18n.translate import t
+from ...notifications.ntfy_client import topic_for_user
 
 _LANG_OPTIONS = ["en", "si", "ta"]
 
@@ -121,6 +122,8 @@ def render(user: dict) -> None:
                 invalidate_user_cache()
                 st.success(t("sidebar.family_saved", lang))
                 st.rerun()
+            st.caption(t("sidebar.family_ntfy_hint", lang))
+            st.code(f"https://ntfy.sh/{topic_for_user(uid)}", language=None)
 
         # ---- TTS toggle ----
         st.divider()

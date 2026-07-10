@@ -55,23 +55,29 @@ def render(user: dict) -> None:
         st.caption(t("panel.medicine.unmatched", lang, names=", ".join(pm["unmatched_names"])))
     if pm["quotes"]:
         col_pharmacy = t("panel.medicine.col_pharmacy", lang)
+        col_basket = t("panel.medicine.col_basket", lang)
         col_address = t("panel.medicine.col_address", lang)
         col_items = t("panel.medicine.col_items", lang)
         col_total = t("panel.medicine.col_total", lang)
         col_distance = t("panel.medicine.col_distance", lang)
         col_missing = t("panel.medicine.col_missing", lang)
+        has_distance = any(q.get("distance_km") is not None for q in pm["quotes"])
         table = []
         for q in pm["quotes"]:
+            missing = q.get("missing") or []
+            # Every row carries every column so the dataframe never misaligns.
             row = {
                 col_pharmacy: q["pharmacy_name"],
-                col_address: q.get("address") or "",
-                col_items: ", ".join(f"{i['name']} (LKR {i['price']:.0f})" for i in q["items"]),
-                col_total: f"{q['total_cost']:.0f}",
+                col_basket: "✅" if not missing else f"⚠️ {len(missing)}",
+                col_total: f"LKR {q['total_cost']:,.0f}",
             }
-            if q.get("distance_km") is not None:
-                row[col_distance] = f"{q['distance_km']:.2f}"
-            if q.get("missing"):
-                row[col_missing] = ", ".join(q["missing"])
+            if has_distance:
+                row[col_distance] = (
+                    f"{q['distance_km']:.1f} km" if q.get("distance_km") is not None else "—"
+                )
+            row[col_items] = ", ".join(f"{i['name']} (LKR {i['price']:.0f})" for i in q["items"])
+            row[col_missing] = ", ".join(missing) if missing else "—"
+            row[col_address] = q.get("address") or ""
             table.append(row)
         st.dataframe(table, use_container_width=True, hide_index=True)
     if st.button(t("panel.medicine.dismiss", lang)):

@@ -46,6 +46,8 @@ def render(user: dict) -> None:
         if not vision_ocr.is_available():
             st.warning(t("panel.rx.unavailable", lang))
 
+        st.markdown(t("panel.rx.step1", lang))
+
         # --- Sample prescription (lets the OCR flow be demoed without a live photo) ---
         use_sample = st.checkbox(t("panel.rx.use_sample", lang), key="rx_use_sample")
         if use_sample:
@@ -96,6 +98,8 @@ def render(user: dict) -> None:
         # --- Shared confirm gate: the ONLY place that triggers a pharmacy lookup ---
         pending = st.session_state.get("pending_rx")
         if pending:
+            st.divider()
+            st.markdown(t("panel.rx.step2", lang))
             st.markdown(t("panel.rx.confirm_prompt", lang))
             edited = st.text_area(
                 t("panel.rx.edit_label", lang),
