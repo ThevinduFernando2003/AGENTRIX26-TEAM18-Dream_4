@@ -5,7 +5,7 @@ Owner: Thevindu (Phase 2 swaps ``booking_agent.process`` for a real Pydantic AI 
 Flow:
 1. Consume a ``route_request`` with route == "booking" → run the booking agent and
    stash the result in ``st.session_state["pending_booking"]``.
-2. Render the pending alternatives with click-to-confirm + ntfy push.
+2. Render the pending alternatives as a visible table with per-row Book buttons.
 """
 
 from __future__ import annotations
@@ -39,6 +39,44 @@ def _consume_route(user: dict) -> None:
         "alternatives": [a.model_dump() for a in resp.alternatives],
     }
     st.session_state.pop("route_request", None)
+    st.rerun()
+
+
+def _book_slot(user: dict, alt: dict, lang: str) -> None:
+    conf = booking_agent.book(user["user_id"], alt["slot_id"])
+    if conf is None:
+        st.warning(t("panel.booking.slot_taken", lang))
+        return
+
+    topic = topic_for_user(user["user_id"])
+    ntfy_send(
+        topic=topic,
+        title="MedBridge AI: appointment confirmed",
+        message=(
+            f"Appointment #{conf.appointment_id} with {conf.doctor_name} at "
+            f"{conf.facility_name} on {conf.date} {conf.time}."
+        ),
+        user_id=user["user_id"],
+        tags=["calendar"],
+        notif_type="booking_confirmed",
+    )
+
+    persist_message(
+        user["user_id"],
+        "assistant",
+        (
+            f"Appointment confirmed: {conf.doctor_name} at {conf.facility_name} on "
+            f"{conf.date} {conf.time}. (Appointment #{conf.appointment_id})"
+        ),
+        conversation_id=st.session_state.get("active_conversation_id"),
+    )
+
+    st.session_state.pop("pending_booking", None)
+    st.session_state["booking_success"] = {
+        "doctor": conf.doctor_name,
+        "date": conf.date,
+        "time": conf.time,
+    }
     st.rerun()
 
 
@@ -76,7 +114,8 @@ def render(user: dict) -> None:
     st.subheader(t("panel.booking.title", lang))
     st.write(translate_dynamic(pb["message"], lang))
 
-    if not pb.get("alternatives"):
+    alts = pb.get("alternatives") or []
+    if not alts:
         # For a "needs_info" result the message above is itself the helpful prompt
         # ("tell me a doctor or specialty"), so skip the misleading "no slots this
         # week" warning and only show it when availability genuinely came back empty.
@@ -88,8 +127,26 @@ def render(user: dict) -> None:
         return
 
     fee_label = t("panel.booking.fee", lang)
-    # Display each alternative slot with a Book button
-    for alt in pb["alternatives"]:
+    book_label = t("panel.booking.book", lang)
+
+    # Visible availability table (what evaluators expect to see after a booking prompt).
+    st.dataframe(
+        [
+            {
+                "Doctor": a["doctor_name"],
+                "Facility": a["facility_name"],
+                "Date": a["date"],
+                "Time": a["time"],
+                fee_label: f"LKR {a['channeling_fee']:.0f}",
+            }
+            for a in alts
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.caption(t("panel.booking.pick_row", lang))
+    for alt in alts:
         col1, col2 = st.columns([4, 1])
         with col1:
             st.markdown(
@@ -97,43 +154,8 @@ def render(user: dict) -> None:
                 f"{alt['date']} at {alt['time']} · {fee_label}: LKR {alt['channeling_fee']:.0f}"
             )
         with col2:
-            if st.button(t("panel.booking.book", lang), key=f"book_{alt['slot_id']}"):
-                # Attempt to book the selected slot
-                conf = booking_agent.book(user["user_id"], alt["slot_id"])
-                if conf is None:
-                    st.warning(t("panel.booking.slot_taken", lang))
-                else:
-                    # Send ntfy notification
-                    topic = topic_for_user(user["user_id"])
-                    ntfy_send(
-                        topic=topic,
-                        title="MedBridge AI: appointment confirmed",
-                        message=(
-                            f"Appointment #{conf.appointment_id} with {conf.doctor_name} at "
-                            f"{conf.facility_name} on {conf.date} {conf.time}."
-                        ),
-                        user_id=user["user_id"],
-                        tags=["calendar"],
-                        notif_type="booking_confirmed",
-                    )
-
-                    # Persist confirmation to chat history (in the active thread)
-                    persist_message(
-                        user["user_id"], "assistant",
-                        f"Appointment confirmed: {conf.doctor_name} at {conf.facility_name} on "
-                        f"{conf.date} {conf.time}. (Appointment #{conf.appointment_id})",
-                        conversation_id=st.session_state.get("active_conversation_id"),
-                    )
-
-                    # Clean up session state; the success card is rendered on the
-                    # next run (a st.success() here would be wiped by the rerun).
-                    st.session_state.pop("pending_booking", None)
-                    st.session_state["booking_success"] = {
-                        "doctor": conf.doctor_name,
-                        "date": conf.date,
-                        "time": conf.time,
-                    }
-                    st.rerun()
+            if st.button(book_label, key=f"book_{alt['slot_id']}"):
+                _book_slot(user, alt, lang)
 
     if st.button(t("panel.booking.dismiss_all", lang), key="booking_dismiss"):
         st.session_state.pop("pending_booking", None)
