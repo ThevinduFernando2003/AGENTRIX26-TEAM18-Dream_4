@@ -251,7 +251,112 @@ class BookingContext:
     raw_text: str = ""  # the patient's verbatim request, passed to the LLM agent
 
 
+_DR_NAME_RE = re.compile(
+    r"\b(?:dr\.?|doctor)\s+([A-Za-z][A-Za-z.'-]{1,30}(?:\s+[A-Za-z][A-Za-z.'-]{1,30}){0,2})",
+    re.IGNORECASE,
+)
+_DATE_HINT_RE = re.compile(
+    r"\b(today|tomorrow|tmrw|tmr|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|"
+    r"\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|in\s+\d+\s+days?)\b",
+    re.IGNORECASE,
+)
+_TIME_HINT_RE = re.compile(
+    r"\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}:\d{2})\b",
+    re.IGNORECASE,
+)
+_NAME_STOPWORDS = {
+    "today",
+    "tomorrow",
+    "tmrw",
+    "tmr",
+    "next",
+    "at",
+    "on",
+    "with",
+    "for",
+    "am",
+    "pm",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+}
+
+
+def _clean_doctor_capture(raw: str) -> str:
+    """Drop trailing date/time words accidentally captured after a doctor name."""
+    parts = []
+    for tok in raw.strip().split():
+        if tok.lower().rstrip(".,") in _NAME_STOPWORDS or parse_time(tok):
+            break
+        parts.append(tok)
+    return " ".join(parts).strip(" .,")
+
+
+def enrich_extracted(extracted: dict | None, raw_text: str = "") -> dict:
+    """Fill doctor/date/time/specialty from verbatim text when the router skipped LLM.
+
+    Heuristic-first chat routing intentionally returns ``extracted={}`` for clear
+    booking verbs so the UI stays fast. Without this enrichment, ``process()``
+    would always reply ``needs_info`` and the booking table would never appear.
+    """
+    out = dict(extracted or {})
+    text = (raw_text or "").strip()
+    if not text:
+        return out
+
+    if not out.get("doctor_name"):
+        # Prefer exact known-doctor match from the DB (most reliable for demos).
+        conn = get_conn()
+        rows = conn.execute(
+            """SELECT d.name AS doctor_name, s.name AS specialty_name
+               FROM Doctor d
+               JOIN Specialty s ON s.specialty_id = d.specialty_id"""
+        ).fetchall()
+        lower = text.lower()
+        for r in rows:
+            name = r["doctor_name"]
+            bare = re.sub(r"^dr\.?\s*", "", name, flags=re.IGNORECASE).strip().lower()
+            if bare and bare in lower:
+                out["doctor_name"] = name
+                break
+        if not out.get("doctor_name"):
+            m = _DR_NAME_RE.search(text)
+            if m:
+                cleaned = _clean_doctor_capture(m.group(1))
+                if cleaned:
+                    out["doctor_name"] = f"Dr. {cleaned}"
+        if not out.get("doctor_name") and not out.get("specialty"):
+            for r in rows:
+                spec = r["specialty_name"]
+                if spec and spec.lower() in lower:
+                    out["specialty"] = spec
+                    break
+
+    if not out.get("date"):
+        m = _DATE_HINT_RE.search(text)
+        if m:
+            out["date"] = m.group(1)
+
+    if not out.get("time"):
+        # Prefer an explicit "at 10:00" / "at 10am" style hit; otherwise first clock-like token.
+        m = re.search(r"\bat\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)", text, re.IGNORECASE)
+        if not m:
+            m = _TIME_HINT_RE.search(text)
+        if m:
+            candidate = m.group(1).strip()
+            if parse_time(candidate):
+                out["time"] = candidate
+
+    return out
+
+
 def process(ctx: BookingContext) -> BookingResponse:
+    ctx.extracted = enrich_extracted(ctx.extracted, ctx.raw_text)
     query = ctx.extracted.get("doctor_name") or ctx.extracted.get("specialty") or ""
     if not query:
         return BookingResponse(
@@ -440,6 +545,9 @@ def process_agentic(ctx: BookingContext) -> BookingResponse:
     atomic book() in the UI does the write. Any fabricated 'booked' status from the
     LLM is downgraded so a confirmation can never be hallucinated.
     """
+    # Always enrich first so deterministic fallback (and the agent prompt) see
+    # doctor/date/time even when chat routing skipped the LLM extractor.
+    ctx.extracted = enrich_extracted(ctx.extracted, ctx.raw_text)
     agent = _get_booking_agent()
     if agent is None:
         return process(ctx)
@@ -457,6 +565,11 @@ def process_agentic(ctx: BookingContext) -> BookingResponse:
         if resp.status == "booked":
             resp.status = "alternatives" if resp.alternatives else "needs_info"
             resp.confirmation = None
+        # If the LLM returned no usable slots, fall back to the SQL path so the
+        # booking table still appears for demo scripts.
+        if not resp.alternatives:
+            logger.info("Booking agent returned no alternatives; using deterministic path")
+            return process(ctx)
         return resp
     except Exception as exc:
         logger.warning("Booking agent run failed, using deterministic fallback: %s", exc)
