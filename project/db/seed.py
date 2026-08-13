@@ -49,8 +49,9 @@ def _seed_users() -> None:
             continue
         conn.execute(
             """INSERT INTO User(username, password_hash, full_name, age, gender,
-                                preferred_language, family_contact_name, family_contact_phone)
-               VALUES(?,?,?,?,?,?,?,?)""",
+                                preferred_language, family_contact_name, family_contact_phone,
+                                consent_accepted_at)
+               VALUES(?,?,?,?,?,?,?,?,datetime('now'))""",
             (
                 u["username"],
                 _hash_pw(u["password"]),

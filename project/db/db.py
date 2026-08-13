@@ -60,6 +60,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if orphan_users:
         conn.commit()
 
+    # Phase 0: PDPA-style consent timestamp on User (nullable for pre-existing rows).
+    user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(User)").fetchall()}
+    if "consent_accepted_at" not in user_cols:
+        conn.execute("ALTER TABLE User ADD COLUMN consent_accepted_at TEXT")
+        conn.commit()
+    # Backfill seed/demo users so existing logins remain valid after the column lands.
+    conn.execute(
+        """UPDATE User SET consent_accepted_at = COALESCE(consent_accepted_at, created_at, datetime('now'))
+           WHERE consent_accepted_at IS NULL"""
+    )
+    conn.commit()
+
 
 def init_db(seed: bool = True) -> None:
     """Create tables if missing and (optionally) load seed data."""

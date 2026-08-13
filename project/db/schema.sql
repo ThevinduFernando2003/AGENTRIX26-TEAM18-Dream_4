@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS User (
     preferred_language   TEXT DEFAULT 'en',
     family_contact_name  TEXT,
     family_contact_phone TEXT,
+    -- PDPA-style health-data processing consent (ISO timestamp); required for new signups.
+    consent_accepted_at  TEXT,
     created_at           TEXT DEFAULT (datetime('now'))
 );
 

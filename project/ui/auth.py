@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 import bcrypt
@@ -10,6 +11,10 @@ import streamlit as st
 from ..db.db import get_conn
 from ..i18n.translate import t
 from .common import language_short_label, render_auth_rights_banner, render_top_banner
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _hash_pw(plain: str) -> str:
@@ -32,11 +37,14 @@ def signup(
     preferred_language: str = "en",
     family_contact_name: str = "",
     family_contact_phone: str = "",
+    consent_accepted: bool = False,
 ) -> tuple[bool, str]:
     if not username or not password:
         return False, "Username and password are required."
     if len(password) < 6:
         return False, "Password must be at least 6 characters."
+    if not consent_accepted:
+        return False, "You must accept the health-data processing consent notice to create an account."
 
     conn = get_conn()
     if conn.execute("SELECT 1 FROM User WHERE username = ?", (username,)).fetchone():
@@ -44,8 +52,9 @@ def signup(
 
     conn.execute(
         """INSERT INTO User(username, password_hash, full_name, age, gender,
-                            preferred_language, family_contact_name, family_contact_phone)
-           VALUES(?,?,?,?,?,?,?,?)""",
+                            preferred_language, family_contact_name, family_contact_phone,
+                            consent_accepted_at)
+           VALUES(?,?,?,?,?,?,?,?,?)""",
         (
             username,
             _hash_pw(password),
@@ -55,6 +64,7 @@ def signup(
             preferred_language,
             family_contact_name or None,
             family_contact_phone or None,
+            _utc_now_iso(),
         ),
     )
     conn.commit()
@@ -77,7 +87,7 @@ def load_user(user_id: int) -> Optional[dict]:
     conn = get_conn()
     row = conn.execute(
         """SELECT user_id, username, full_name, age, gender, preferred_language,
-                  family_contact_name, family_contact_phone
+                  family_contact_name, family_contact_phone, consent_accepted_at
            FROM User WHERE user_id = ?""",
         (user_id,),
     ).fetchone()
@@ -233,11 +243,24 @@ def render_auth_gate() -> Optional[dict]:
             )
             fc_name = st.text_input(t("auth.family_name", L), key="su_fcn")
             fc_phone = st.text_input(t("auth.family_phone", L), key="su_fcp")
+            st.caption(t("auth.consent_notice", L))
+            consent = st.checkbox(t("auth.consent_checkbox", L), key="su_consent")
             if st.form_submit_button(t("auth.signup_btn", L)):
                 ok, msg = signup(
-                    u.strip(), p, full_name, int(age), gender, lang, fc_name, fc_phone
+                    u.strip(),
+                    p,
+                    full_name,
+                    int(age),
+                    gender,
+                    lang,
+                    fc_name,
+                    fc_phone,
+                    consent_accepted=bool(consent),
                 )
-                (st.success if ok else st.error)(msg)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg if consent else t("auth.consent_required", L))
 
     render_auth_rights_banner(L)
     return None
