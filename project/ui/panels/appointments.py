@@ -1,4 +1,4 @@
-"""My Appointments panel — list confirmed bookings and cancel (Phase 0 / FR-P08).
+"""My Appointments panel — cancel + reschedule (Phase 0/1 / FR-P08, FR-P15).
 
 Owner: Thevindu (booking domain). History stays read-only; this panel owns mutations.
 """
@@ -24,7 +24,7 @@ def render(user: dict) -> None:
         st.caption(t("panel.appointments.hint", lang))
         for a in appts:
             aid = a["appointment_id"]
-            cols = st.columns([4, 1])
+            cols = st.columns([3, 1, 1])
             with cols[0]:
                 st.markdown(
                     t(
@@ -78,3 +78,54 @@ def render(user: dict) -> None:
                             )
                         )
                         st.rerun()
+            with cols[2]:
+                if st.button(
+                    t("panel.appointments.reschedule", lang),
+                    key=f"resched_appt_{aid}",
+                ):
+                    st.session_state["reschedule_appointment_id"] = aid
+
+        rid = st.session_state.get("reschedule_appointment_id")
+        if rid:
+            alts = booking_agent.alternatives_for_appointment(user["user_id"], rid)
+            st.markdown(t("panel.appointments.reschedule_pick", lang))
+            if not alts:
+                st.info(t("panel.appointments.reschedule_none", lang))
+            else:
+                for alt in alts[:8]:
+                    label = (
+                        f"{alt.doctor_name} · {alt.facility_name} · {alt.date} {alt.time} "
+                        f"(LKR {alt.channeling_fee:,.0f})"
+                    )
+                    if st.button(label, key=f"pick_resched_{rid}_{alt.slot_id}"):
+                        conf = booking_agent.reschedule(
+                            user["user_id"], rid, alt.slot_id
+                        )
+                        if conf is None:
+                            st.warning(t("panel.appointments.reschedule_fail", lang))
+                        else:
+                            ntfy_send(
+                                topic=topic_for_user(user["user_id"]),
+                                title="MedBridge AI: appointment rescheduled",
+                                message=(
+                                    f"Moved to {conf.doctor_name} at {conf.facility_name} "
+                                    f"on {conf.date} {conf.time}."
+                                ),
+                                user_id=user["user_id"],
+                                tags=["calendar"],
+                                notif_type="booking_rescheduled",
+                            )
+                            st.session_state.pop("reschedule_appointment_id", None)
+                            st.success(
+                                t(
+                                    "panel.appointments.rescheduled",
+                                    lang,
+                                    doctor=conf.doctor_name,
+                                    date=conf.date,
+                                    time=conf.time,
+                                )
+                            )
+                            st.rerun()
+            if st.button(t("panel.appointments.reschedule_cancel_ui", lang), key="resched_dismiss"):
+                st.session_state.pop("reschedule_appointment_id", None)
+                st.rerun()

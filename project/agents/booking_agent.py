@@ -246,6 +246,96 @@ def cancel(user_id: int, appointment_id: int) -> BookingConfirmation | None:
         return None
 
 
+def reschedule(
+    user_id: int, appointment_id: int, new_slot_id: int
+) -> BookingConfirmation | None:
+    """Atomically cancel a future confirmed appointment and book ``new_slot_id``.
+
+    Ownership required. New slot must be available. Old slot is reopened.
+    """
+    if new_slot_id <= 0:
+        return None
+    conn = get_conn()
+    today = dtdate.today().isoformat()
+    try:
+        with conn:
+            old = conn.execute(
+                """SELECT a.appointment_id, a.user_id, a.status, a.slot_id,
+                          s.date AS old_date
+                   FROM Appointment a
+                   JOIN AppointmentSlot s ON s.slot_id = a.slot_id
+                   WHERE a.appointment_id = ?""",
+                (appointment_id,),
+            ).fetchone()
+            if not old or old["user_id"] != user_id or old["status"] != "confirmed":
+                return None
+            if old["old_date"] < today:
+                return None
+            if old["slot_id"] == new_slot_id:
+                return None
+
+            new_row = conn.execute(
+                """SELECT s.slot_id, s.doctor_id, s.date, s.time, s.is_available,
+                          d.name AS doctor_name, d.channeling_fee,
+                          f.name AS facility_name
+                   FROM AppointmentSlot s
+                   JOIN Doctor d ON d.doctor_id = s.doctor_id
+                   JOIN Facility f ON f.facility_id = d.facility_id
+                   WHERE s.slot_id = ?""",
+                (new_slot_id,),
+            ).fetchone()
+            if not new_row or not new_row["is_available"]:
+                return None
+
+            conn.execute(
+                "UPDATE Appointment SET status = 'cancelled' WHERE appointment_id = ?",
+                (appointment_id,),
+            )
+            conn.execute(
+                "UPDATE AppointmentSlot SET is_available = 1 WHERE slot_id = ?",
+                (old["slot_id"],),
+            )
+            cur = conn.execute(
+                "INSERT INTO Appointment(user_id, slot_id, status) VALUES(?,?,?)",
+                (user_id, new_slot_id, "confirmed"),
+            )
+            conn.execute(
+                "UPDATE AppointmentSlot SET is_available = 0 WHERE slot_id = ?",
+                (new_slot_id,),
+            )
+            return BookingConfirmation(
+                appointment_id=cur.lastrowid,
+                slot_id=new_slot_id,
+                doctor_name=new_row["doctor_name"],
+                facility_name=new_row["facility_name"],
+                date=new_row["date"],
+                time=new_row["time"],
+                channeling_fee=new_row["channeling_fee"] or 0.0,
+            )
+    except Exception as exc:
+        logger.warning("reschedule() failed: %s", exc)
+        return None
+
+
+def alternatives_for_appointment(user_id: int, appointment_id: int) -> list[AlternativeSlot]:
+    """Available alternative slots for the same doctor as a confirmed appointment."""
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT a.user_id, a.status, s.doctor_id, s.date, s.time
+           FROM Appointment a
+           JOIN AppointmentSlot s ON s.slot_id = a.slot_id
+           WHERE a.appointment_id = ?""",
+        (appointment_id,),
+    ).fetchone()
+    if not row or row["user_id"] != user_id or row["status"] != "confirmed":
+        return []
+    try:
+        target = datetime.strptime(f"{row['date']} {row['time']}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        target = datetime.now()
+    return nearest_alternatives(row["doctor_id"], target)
+
+
 # ---------- date/time parsing ----------
 
 _TIME_RE = re.compile(r"(\d{1,2})(?::?(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
