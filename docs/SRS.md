@@ -1,9 +1,9 @@
 # MedBridge AI — Software Requirements Specification (SRS)
 
 **Project:** MedBridge AI · AgenTrix 2026 · Team Dream_4 (TEAM18)  
-**Version:** 1.1 (post-viva polish + upgrade roadmap)  
-**Status:** Living document — derived from `Readme.md` tiers, `docs/architecture.md`, `docs/DEFENSE.md`, and implemented code  
-**Related:** [`SAD.md`](SAD.md) · [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) · [`DEFENSE.md`](DEFENSE.md)
+**Version:** 1.2  
+**Status:** Authoritative requirements baseline for upgrade Phases 0–3  
+**Related:** [`SAD.md`](SAD.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) · [`DEFENSE.md`](DEFENSE.md)
 
 ---
 
@@ -11,162 +11,182 @@
 
 ### 1.1 Purpose
 
-This SRS defines functional and non-functional requirements for MedBridge AI: a multi-agent healthcare **navigator** for Sri Lanka. It distinguishes **as-built prototype** requirements from **production target** requirements.
+Define **what** MedBridge AI must do for patients, families, hospitals, pharmacies, and platform operators — separating **as-built prototype** from **production target** — so engineering can execute Phases 0–3 without scope drift into “AI doctor” features.
 
-### 1.2 Scope
+### 1.2 Product goal
 
-**In scope**
+MedBridge is a multi-agent healthcare **navigator** for Sri Lanka: specialty triage, emergency guidance, booking, medicine comparison, prescription OCR, and multi-specialist report review — **never a diagnoser**. Production form is a **two-sided platform**: hospitals and pharmacies publish slots/prices/stock into MedBridge; agents consume data only through typed tools.
 
-- Patient conversational navigation (triage → specialty, never diagnosis)
-- Emergency screening, booking, medicine comparison, Rx OCR, specialist report panel
-- Trilingual UI (EN/SI/TA) and voice I/O
-- Two-sided marketplace model (hospitals/pharmacies publish into the platform)
-- Structural safety and graceful LLM degradation
+### 1.3 In scope / out of scope
 
-**Out of scope (non-goals)**
-
-- Automated medical diagnosis or disease labeling as clinical truth
-- Autonomous prescribing or dosage invention
-- Claiming live hospital/pharmacy feeds without supplier accountability
-
-### 1.3 Definitions
-
-| Term | Meaning |
+| In scope | Out of scope (non-goals) |
 |---|---|
-| Navigator | Suggests care path / logistics; does not diagnose |
-| SEED data | Curated demo catalog labeled “not live” |
-| Structural safety | Enforced in code (regex, confirm gates, atomic SQL), not prompts alone |
-| `route_request` | Session signal from chat panel to domain panels |
+| Navigation, logistics, comparison, alerts | Automated diagnosis as clinical truth |
+| Two-sided publish model (hospital/pharmacy) | Inventing dosages or autonomous prescribing |
+| Structural safety + offline LLM fallbacks | Claiming live feeds without supplier accountability |
+| Trilingual UX (EN/SI/TA) + voice | Replacing licensed clinicians |
 
-### 1.4 References
+### 1.4 Stakeholders
 
-- `Readme.md`, `project/README.md` — feature tiers  
-- `docs/architecture.md` — system diagrams  
-- `docs/DEFENSE.md` — production path & compliance posture  
-- `docs/UPGRADE_PLAN.md` — phased roadmap  
-
----
-
-## 2. Overall description
-
-### 2.1 Product perspective
-
-MedBridge is a **two-sided platform**:
-
-- **Demand side:** patients (and caregivers)  
-- **Supply side:** hospitals/clinics (slots) and pharmacies (prices/stock)  
-
-Sri Lanka lacks open public channeling/pharmacy-stock APIs; suppliers publish **into** MedBridge. Agents consume data only through typed tools.
-
-### 2.2 User classes
-
-| User | Description |
+| Stakeholder | Goals |
 |---|---|
-| Patient | Primary end user of the chat app |
-| Family contact | Receives emergency/booking/reminder alerts |
-| Hospital staff | Publishes doctors/slots; manages bookings (target) |
-| Pharmacy staff | Publishes prices/stock (target; concept portal today) |
-| Platform admin | Ops, compliance, content (target) |
+| Patient / caregiver | Right specialty, book, affordable medicine, understand reports, language/voice, emergency help |
+| Family contact | Reliable emergency / booking / reminder alerts |
+| Hospital / clinic | Publish doctors & slots; receive authoritative bookings; reduce no-shows |
+| Pharmacy | Publish prices & stock; foot traffic from searchers |
+| Platform admin | Users, content, PDPA, monitoring, feature flags |
+| Safety / legal | No diagnosis claims; audit; human gates on high-risk AI |
 
-### 2.3 Operating environment (as-built)
+### 1.5 Assumptions & constraints
 
-- Python 3.11+ (3.13 used in polish env)  
-- Streamlit patient app `:8501`, supplier portal `:8502`  
-- SQLite + ChromaDB (local ONNX embeddings)  
-- LLM: Gemini or OpenAI via `LLM_PROVIDER`  
-- Notifications: ntfy.sh  
-
-### 2.4 Constraints
-
-- Free-tier / competition constraints shaped the prototype  
-- No diagnosis language on clinical surfaces  
-- SEED catalogs must remain labeled until live suppliers exist  
-- PDPA (Sri Lanka) treats health data as special category  
+1. No open public Sri Lankan channeling or pharmacy-stock APIs → marketplace publish model.  
+2. Prototype catalogs may be SEED until real suppliers onboard (must stay labeled).  
+3. Safety is enforced in **code**, not prompts alone.  
+4. Health data is a special category under Sri Lanka PDPA No. 9 of 2022.  
+5. **Structural safety is non-negotiable** across every phase.
 
 ---
 
-## 3. Functional requirements
+## 2. Functional requirements
 
-Legend: **✅** as-built · **⚠️** partial · **❌** missing (target)
+Legend: ✅ as-built · ⚠️ partial · ❌ target
 
-| ID | Requirement | Status |
-|---|---|---|
-| FR-01 | User signup/login with bcrypt-hashed passwords | ✅ |
-| FR-02 | Multi-conversation chat with persistent history | ✅ |
-| FR-03 | Emergency regex screen **before** any LLM; confirm; `tel:1990` | ✅ |
-| FR-04 | Family alerts on emergency/booking/report/Rx/reminders | ⚠️ ntfy topic (phone unused for SMS) |
-| FR-05 | Symptom → specialty navigation via RAG; UI disclaimer | ✅ |
-| FR-06 | Book doctor; alternatives if full; atomic `book()` write | ✅ |
-| FR-07 | Medicine price/stock/distance comparison | ✅ |
-| FR-08 | Prescription OCR with human confirm before pharmacy lookup | ✅ |
-| FR-09 | Three independent specialist agents + moderator; disagreement non-empty | ✅ |
-| FR-10 | EN / Sinhala / Tamil UI; STT/TTS paths | ✅ |
-| FR-11 | Future-visit reminder detect + notify | ⚠️ manual fire only |
-| FR-12 | Pharmacy publishes prices/stock into shared tables | ⚠️ concept portal |
-| FR-13 | Hospital publishes appointment slots | ⚠️ concept portal |
-| FR-14 | Pay channeling fee / receipts | ❌ |
-| FR-15 | Admin console (users, audit, flags) | ❌ |
-| FR-16 | Cross-domain patient activity history | ✅ read-only |
-| FR-17 | Provider-agnostic LLM switch (`gemini` \| `openai`) | ✅ |
-| FR-18 | Offline/deterministic fallbacks when API key absent | ✅ |
-| FR-19 | Patient cancel/reschedule appointment | ❌ (cancel planned Phase 0) |
-| FR-20 | Explicit consent capture for health-data processing | ❌ (Phase 0) |
+### 2.1 Patient / client
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-P01 | Signup/login with hashed passwords | ✅ | harden P1 |
+| FR-P02 | Explicit consent for health-data processing | ❌ | **P0** |
+| FR-P03 | Multi-thread chat + history | ✅ | — |
+| FR-P04 | Emergency regex before LLM; confirm; `tel:1990` | ✅ | extend P3 |
+| FR-P05 | Symptom → specialty (RAG); never diagnose; disclaimer | ✅ | eval P2 |
+| FR-P06 | Book doctor; alternatives if full; atomic write | ✅ | — |
+| FR-P07 | Visible availability table + Book actions | ✅ | — |
+| FR-P08 | Cancel (and later reschedule) appointment | ❌ | **P0** cancel / P1 reschedule |
+| FR-P09 | Medicine price/stock/distance compare | ✅ | — |
+| FR-P10 | Freshness badge on pharmacy prices (“updated X ago”) | ❌ | **P0** |
+| FR-P11 | Rx OCR + human confirm before pharmacy lookup | ✅ | — |
+| FR-P12 | 3-specialist panel + non-empty disagreement | ✅ | — |
+| FR-P13 | EN/SI/TA UI + STT/TTS | ✅ | — |
+| FR-P14 | Future-visit reminders auto-delivered when due | ⚠️ manual | **P0** worker |
+| FR-P15 | My Appointments / richer history export | ⚠️ history | P1–P2 |
+| FR-P16 | Pay channeling fee + receipt | ❌ | P2 |
+
+### 2.2 Family
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-F01 | Receive emergency/booking/reminder alerts | ⚠️ ntfy topic | P1 SMS/OTP |
+| FR-F02 | Verified family phone (OTP) | ❌ | P1 |
+| FR-F03 | Authenticated push (FCM) / WhatsApp option | ❌ | P2 |
+
+### 2.3 Hospital
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-H01 | Publish appointment slots into platform DB | ⚠️ concept portal | **P0** login · **P1** full portal |
+| FR-H02 | Org/staff accounts + RBAC | ❌ | P1 |
+| FR-H03 | Slot templates; view/manage bookings; no-show | ❌ | P1 |
+| FR-H04 | HIS / channeling adapter (optional) | ❌ | P3 |
+
+### 2.4 Pharmacy
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-PH01 | Publish price/stock into shared tables | ⚠️ concept portal | **P0** login · **P1** full portal |
+| FR-PH02 | Merchant accounts + RBAC | ❌ | P1 |
+| FR-PH03 | CSV bulk upload; freshness timestamps | ❌ | P0 stamp · P1 CSV |
+| FR-PH04 | POS / ERP sync adapters | ❌ | P3 |
+
+### 2.5 Platform admin / ops
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-A01 | Admin console (users, facilities, flags) | ❌ | P2 |
+| FR-A02 | CI on every push (`pytest`) | ❌ | **P0** |
+| FR-A03 | Formal SRS/SAD maintained | ✅ (this doc) | **P0** done |
+| FR-A04 | UAT checklist executed & logged | ⚠️ demo scripts | **P0** |
+| FR-A05 | PDPA export/delete workflows | ❌ | P2 |
+| FR-A06 | Doc drift cleanup (README vs code) | ⚠️ | **P0** |
+
+### 2.6 Cross-cutting intelligence
+
+| ID | Requirement | Now | Phase |
+|---|---|---|---|
+| FR-X01 | `LLM_PROVIDER` Gemini \| OpenAI | ✅ | — |
+| FR-X02 | Deterministic fallbacks when LLM down | ✅ | forever |
+| FR-X03 | Agents use typed tools only (no scrape) | ✅ | forever |
+| FR-X04 | Road distance (Maps) vs haversine | ❌ | P2–P3 |
+| FR-X05 | Multi-hotline emergency routing | ❌ | P3 |
 
 ---
 
-## 4. Non-functional requirements
+## 3. Non-functional requirements
 
-| ID | Requirement | Status |
-|---|---|---|
-| NFR-01 | Safety: never diagnose; disclaimers on clinical UI | ✅ |
-| NFR-02 | Reliability: LLM failure → graceful fallback | ✅ |
-| NFR-03 | Performance: unambiguous domain routes without LLM hang | ✅ heuristic-first |
-| NFR-04 | Privacy: PDPA-aligned handling of health data | ⚠️ partial |
-| NFR-05 | Security: hashed passwords; user-scoped queries | ⚠️ demo auth (`?uid=` unsigned) |
-| NFR-06 | Cost control: local embeddings default; timed LLM calls | ✅ |
-| NFR-07 | Maintainability: panel contract + offline test suite (52) | ✅ |
-| NFR-08 | Usability: trilingual + voice | ✅ |
-| NFR-09 | Scalability to multi-tenant production load | ❌ SQLite/Streamlit |
+| ID | NFR | Now | Target phase |
+|---|---|---|---|
+| NFR-01 | **Structural safety non-negotiable** | ✅ | all phases |
+| NFR-02 | Graceful degradation without API key | ✅ | all |
+| NFR-03 | Heuristic-first domain latency | ✅ | all |
+| NFR-04 | PDPA-aligned privacy | ⚠️ | P0 consent · P2 pack |
+| NFR-05 | AuthN/AuthZ production-grade | ⚠️ demo | P1 JWT/RBAC |
+| NFR-06 | Offline test suite ≥52, CI green | ✅ local / ❌ CI | **P0** CI |
+| NFR-07 | Scalability beyond single SQLite writer | ❌ | P1 Postgres · P2 API |
+| NFR-08 | Mobile-first usable UX | ⚠️ Streamlit | P2 React/PWA |
+| NFR-09 | Observability (logs, audit, kill switches) | ⚠️ NotificationLog | P2 |
 
 ---
 
-## 5. Tier mapping (README)
+## 4. Initial 10 work items (SRS → delivery)
+
+| # | Work item | Primary FR/NFR | Phase |
+|---|---|---|---|
+| 1 | Consent capture at signup | FR-P02, NFR-04 | P0 |
+| 2 | Pharmacy freshness badges | FR-P10, FR-PH03 | P0 |
+| 3 | Cancel appointment | FR-P08 | P0 |
+| 4 | Reminder cron / worker | FR-P14 | P0 |
+| 5 | Supplier login (pharmacy/hospital bind) | FR-H01, FR-PH01 | P0 |
+| 6 | CI pytest (GitHub Actions) | FR-A02, NFR-06 | P0 |
+| 7 | Formalize SRS + SAD | FR-A03 | P0 ✅ |
+| 8 | UAT checklist | FR-A04 | P0 |
+| 9 | Doc cleanup (drift) | FR-A06 | P0 |
+| 10 | Keep structural safety non-negotiable | NFR-01 | all |
+
+Detailed tasks: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md).
+
+---
+
+## 5. Acceptance criteria (prototype + Phase 0 exit)
+
+1. Emergency before LLM; confirm → `tel:1990`.  
+2. Booking conflict → alternatives **table** → atomic Book.  
+3. Medicine sort: complete baskets first; freshness visible after P0.  
+4. OCR never pharmacies before confirm.  
+5. Specialist disagreement list never empty.  
+6. App usable with API key removed.  
+7. `pytest` green offline; CI runs on push after P0.  
+8. Signup stores consent timestamp after P0.  
+9. Patient can cancel own future appointment after P0.  
+10. Due reminders fire without manual button after P0.  
+11. Supplier portal requires login/passcode and scopes edits after P0.
+
+---
+
+## 6. Tier mapping (README)
 
 | Tier | Capabilities |
 |---|---|
-| **1 — Core** | Auth, chat, emergency, booking, medicine, history |
-| **2 — Specialist** | Specialist panel, moderator, Rx OCR, related ntfy types |
-| **3 — i18n & voice** | EN/SI/TA, STT/TTS, dynamic translation, reminders |
+| 1 Core | Auth, chat, emergency, booking, medicine, history |
+| 2 Specialist | Panel, moderator, Rx OCR, related ntfy |
+| 3 i18n & voice | EN/SI/TA, STT/TTS, translation, reminders |
 
 ---
 
-## 6. Data requirements
+## 7. Traceability
 
-### System-of-record (user-owned)
-
-`User`, `Conversation`, `ChatMessage`, `Appointment`, `Prescription`, `MedicalReport`, `SpecialistOpinion`, `ConsensusReport`, `FutureVisitReminder`, `NotificationLog`
-
-### Marketplace catalog (seed → supplier-published)
-
-`Specialty`, `Facility`, `Doctor`, `AppointmentSlot`, `Medicine`, `Pharmacy`, `PharmacyMedicinePrice`
-
-Schema: `project/db/schema.sql`
-
----
-
-## 7. Acceptance criteria (prototype)
-
-1. Emergency phrase triggers panel before LLM; confirm shows `tel:1990`.  
-2. Booking prompt for seeded full slot shows alternatives table; Book writes atomically.  
-3. Medicine query returns sorted pharmacies; complete baskets rank first.  
-4. OCR does not run pharmacy lookup until confirm.  
-5. Specialist panel shows three opinions; disagreement list non-empty.  
-6. App runs usable flows with API key removed (fallbacks).  
-7. `pytest` suite green offline (52 tests).  
-8. Supplier portal stock toggle visible on patient medicine query.
-
----
-
-## 8. Future requirements
-
-See [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) Phases 0–3: consent, freshness, RBAC portals, Postgres, FastAPI/React, payments, PDPA export/delete, POS/HIS adapters.
+| Need | Document |
+|---|---|
+| How it is built | [`SAD.md`](SAD.md) |
+| How we deliver Phases 0–3 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
+| Gap audit narrative | [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) |
+| Viva defense | [`DEFENSE.md`](DEFENSE.md) |
