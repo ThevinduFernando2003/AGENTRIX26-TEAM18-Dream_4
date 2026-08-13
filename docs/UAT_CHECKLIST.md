@@ -1,7 +1,7 @@
 # MedBridge AI — UAT Checklist
 
-**Use at:** end of Phase 0, and every later phase exit.  
-**Related:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`DEMO_STEPS_UPDATED.md`](DEMO_STEPS_UPDATED.md) · [`SRS.md`](SRS.md)
+**Use at:** end of Phase 0 / Phase 1 kickoff, and every later phase exit.  
+**Related:** [`PHASE_STATUS.md`](PHASE_STATUS.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`DEMO_STEPS_UPDATED.md`](DEMO_STEPS_UPDATED.md) · [`SRS.md`](SRS.md)
 
 **Build / commit:** _______________  
 **Tester:** _______________  
@@ -18,39 +18,43 @@
 | A3 | `hello` → warm LLM or acceptable fallback | ☐ | |
 | A4 | Emergency phrase → confirm → `tel:1990` (+ alert) | ☐ | |
 | A5 | Book Dr Sunil tomorrow 10:00 → **table** → Book → success | ☐ | |
-| A6 | Cancel that appointment → slot free again | ☐ | Phase 0+ |
+| A6 | Cancel that appointment → slot free again | ☐ | My appointments |
+| A6b | Reschedule to another same-doctor slot | ☐ | Phase 1.4 |
 | A7 | Medicine Panadol+Amoxicillin → sort + freshness badge | ☐ | |
-| A8 | Portal Losartan in-stock → patient sees update | ☐ | |
+| A8 | Portal Losartan in-stock → patient sees update | ☐ | union staff |
 | A9 | Report ambiguous sample → 3 opinions + disagreement | ☐ | |
 | A10 | Rx OCR → confirm gate → pharmacies | ☐ | |
 | A11 | `demo3` reminder / SI smoke | ☐ | |
 | A12 | API key removed → core flows still work | ☐ | |
+| A13 | Signup without consent blocked | ☐ | |
 
 ## B. Hospital side
 
 | # | Case | Pass? | Notes |
 |---|---|---|---|
-| B1 | Supplier/hospital login required | ☐ | Phase 0+ |
+| B1 | Login `nawaloka` / `nawalokapass` required | ☐ | hospital_staff |
 | B2 | Publish slot for bound facility only | ☐ | |
 | B3 | Duplicate slot rejected cleanly | ☐ | |
-| B4 | Patient booking appears for hospital (P1) | ☐ | |
+| B4 | Today’s bookings lists patient booking | ☐ | Phase 1.2 |
+| B5 | Mark no-show | ☐ | |
+| B6 | Slot template publishes multiple days | ☐ | |
 
 ## C. Pharmacy side
 
 | # | Case | Pass? | Notes |
 |---|---|---|---|
-| C1 | Pharmacy login / bind required | ☐ | Phase 0+ |
+| C1 | Login `union` / `unionpass` required | ☐ | pharmacy_staff |
 | C2 | Edit price/stock updates `updated_at` | ☐ | |
 | C3 | Cannot edit another pharmacy’s rows | ☐ | |
-| C4 | CSV import (P1) | ☐ | |
+| C4 | CSV import updates bound pharmacy only | ☐ | Phase 1.3 |
 
 ## D. Family / notify
 
 | # | Case | Pass? | Notes |
 |---|---|---|---|
 | D1 | ntfy emergency/booking received if subscribed | ☐ | |
-| D2 | Reminder worker fires due reminder (P0) | ☐ | |
-| D3 | SMS to verified family (P1) | ☐ | |
+| D2 | Reminder worker `--once` fires due reminder | ☐ | |
+| D3 | SMS stub/http fires when family phone set | ☐ | OTP still open |
 
 ## E. Safety regression (mandatory)
 
@@ -67,7 +71,7 @@
 
 | # | Case | Pass? | Notes |
 |---|---|---|---|
-| F1 | `pytest -q` → 52+ green | ☐ | |
+| F1 | `pytest -q` → green (≈85 collected) | ☐ | |
 | F2 | GitHub Actions CI green on push | ☐ | Phase 0+ |
 | F3 | README matches heuristic-first router | ☐ | |
 

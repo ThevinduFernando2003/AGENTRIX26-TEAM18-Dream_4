@@ -1,9 +1,9 @@
 # MedBridge AI — Software Requirements Specification (SRS)
 
 **Project:** MedBridge AI · AgenTrix 2026 · Team Dream_4 (TEAM18)  
-**Version:** 1.2  
-**Status:** Authoritative requirements baseline for upgrade Phases 0–3  
-**Related:** [`SAD.md`](SAD.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) · [`DEFENSE.md`](DEFENSE.md)
+**Version:** 1.3  
+**Status:** Authoritative requirements baseline; Phase 0 + Phase 1.1–1.7 implemented on `booking` (see [`PHASE_STATUS.md`](PHASE_STATUS.md))  
+**Related:** [`SAD.md`](SAD.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md) · [`PHASE_STATUS.md`](PHASE_STATUS.md) · [`DEFENSE.md`](DEFENSE.md)
 
 ---
 
@@ -56,46 +56,46 @@ Legend: ✅ as-built · ⚠️ partial · ❌ target
 | ID | Requirement | Now | Phase |
 |---|---|---|---|
 | FR-P01 | Signup/login with hashed passwords | ✅ | harden P1 |
-| FR-P02 | Explicit consent for health-data processing | ❌ | **P0** |
+| FR-P02 | Explicit consent for health-data processing | ✅ | P0 done |
 | FR-P03 | Multi-thread chat + history | ✅ | — |
 | FR-P04 | Emergency regex before LLM; confirm; `tel:1990` | ✅ | extend P3 |
 | FR-P05 | Symptom → specialty (RAG); never diagnose; disclaimer | ✅ | eval P2 |
 | FR-P06 | Book doctor; alternatives if full; atomic write | ✅ | — |
 | FR-P07 | Visible availability table + Book actions | ✅ | — |
-| FR-P08 | Cancel (and later reschedule) appointment | ❌ | **P0** cancel / P1 reschedule |
+| FR-P08 | Cancel (and later reschedule) appointment | ✅ | P0 cancel · P1 reschedule |
 | FR-P09 | Medicine price/stock/distance compare | ✅ | — |
-| FR-P10 | Freshness badge on pharmacy prices (“updated X ago”) | ❌ | **P0** |
+| FR-P10 | Freshness badge on pharmacy prices (“updated X ago”) | ✅ | P0 done |
 | FR-P11 | Rx OCR + human confirm before pharmacy lookup | ✅ | — |
 | FR-P12 | 3-specialist panel + non-empty disagreement | ✅ | — |
 | FR-P13 | EN/SI/TA UI + STT/TTS | ✅ | — |
-| FR-P14 | Future-visit reminders auto-delivered when due | ⚠️ manual | **P0** worker |
-| FR-P15 | My Appointments / richer history export | ⚠️ history | P1–P2 |
+| FR-P14 | Future-visit reminders auto-delivered when due | ✅ | worker + sidebar override |
+| FR-P15 | My Appointments / richer history export | ⚠️ | My Appointments + cancel/reschedule; export later |
 | FR-P16 | Pay channeling fee + receipt | ❌ | P2 |
 
 ### 2.2 Family
 
 | ID | Requirement | Now | Phase |
 |---|---|---|---|
-| FR-F01 | Receive emergency/booking/reminder alerts | ⚠️ ntfy topic | P1 SMS/OTP |
-| FR-F02 | Verified family phone (OTP) | ❌ | P1 |
+| FR-F01 | Receive emergency/booking/reminder alerts | ⚠️ | ntfy + SMS stub/http; OTP later |
+| FR-F02 | Verified family phone (OTP) | ❌ | P1 remaining |
 | FR-F03 | Authenticated push (FCM) / WhatsApp option | ❌ | P2 |
 
 ### 2.3 Hospital
 
 | ID | Requirement | Now | Phase |
 |---|---|---|---|
-| FR-H01 | Publish appointment slots into platform DB | ⚠️ concept portal | **P0** login · **P1** full portal |
-| FR-H02 | Org/staff accounts + RBAC | ❌ | P1 |
-| FR-H03 | Slot templates; view/manage bookings; no-show | ❌ | P1 |
+| FR-H01 | Publish appointment slots into platform DB | ✅ | staff portal + templates |
+| FR-H02 | Org/staff accounts + RBAC | ✅ | `User.role` + org bind |
+| FR-H03 | Slot templates; view/manage bookings; no-show | ✅ | P1.2 |
 | FR-H04 | HIS / channeling adapter (optional) | ❌ | P3 |
 
 ### 2.4 Pharmacy
 
 | ID | Requirement | Now | Phase |
 |---|---|---|---|
-| FR-PH01 | Publish price/stock into shared tables | ⚠️ concept portal | **P0** login · **P1** full portal |
-| FR-PH02 | Merchant accounts + RBAC | ❌ | P1 |
-| FR-PH03 | CSV bulk upload; freshness timestamps | ❌ | P0 stamp · P1 CSV |
+| FR-PH01 | Publish price/stock into shared tables | ✅ | portal CRUD |
+| FR-PH02 | Merchant accounts + RBAC | ✅ | `pharmacy_staff` |
+| FR-PH03 | CSV bulk upload; freshness timestamps | ✅ | stamp + CSV |
 | FR-PH04 | POS / ERP sync adapters | ❌ | P3 |
 
 ### 2.5 Platform admin / ops
@@ -103,11 +103,11 @@ Legend: ✅ as-built · ⚠️ partial · ❌ target
 | ID | Requirement | Now | Phase |
 |---|---|---|---|
 | FR-A01 | Admin console (users, facilities, flags) | ❌ | P2 |
-| FR-A02 | CI on every push (`pytest`) | ❌ | **P0** |
-| FR-A03 | Formal SRS/SAD maintained | ✅ (this doc) | **P0** done |
-| FR-A04 | UAT checklist executed & logged | ⚠️ demo scripts | **P0** |
+| FR-A02 | CI on every push (`pytest`) | ✅ | GitHub Actions |
+| FR-A03 | Formal SRS/SAD maintained | ✅ (this doc) | living |
+| FR-A04 | UAT checklist executed & logged | ⚠️ | checklist ready; run & sign |
 | FR-A05 | PDPA export/delete workflows | ❌ | P2 |
-| FR-A06 | Doc drift cleanup (README vs code) | ⚠️ | **P0** |
+| FR-A06 | Doc drift cleanup (README vs code) | ✅ | Phase status + this refresh |
 
 ### 2.6 Cross-cutting intelligence
 
@@ -128,10 +128,10 @@ Legend: ✅ as-built · ⚠️ partial · ❌ target
 | NFR-01 | **Structural safety non-negotiable** | ✅ | all phases |
 | NFR-02 | Graceful degradation without API key | ✅ | all |
 | NFR-03 | Heuristic-first domain latency | ✅ | all |
-| NFR-04 | PDPA-aligned privacy | ⚠️ | P0 consent · P2 pack |
-| NFR-05 | AuthN/AuthZ production-grade | ⚠️ demo | P1 JWT/RBAC |
-| NFR-06 | Offline test suite ≥52, CI green | ✅ local / ❌ CI | **P0** CI |
-| NFR-07 | Scalability beyond single SQLite writer | ❌ | P1 Postgres · P2 API |
+| NFR-04 | PDPA-aligned privacy | ⚠️ | consent done · P2 pack |
+| NFR-05 | AuthN/AuthZ production-grade | ⚠️ | RBAC roles done · JWT later |
+| NFR-06 | Offline test suite ≥52, CI green | ✅ | ~85 tests · Actions |
+| NFR-07 | Scalability beyond single SQLite writer | ⚠️ | `DATABASE_URL` Postgres optional · P2 API |
 | NFR-08 | Mobile-first usable UX | ⚠️ Streamlit | P2 React/PWA |
 | NFR-09 | Observability (logs, audit, kill switches) | ⚠️ NotificationLog | P2 |
 

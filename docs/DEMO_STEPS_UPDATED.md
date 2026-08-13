@@ -1,10 +1,10 @@
 # MedBridge AI — Updated Demo Steps (OpenAI live)
 
-**Status:** OpenAI `gpt-4o-mini` is configured and verified · booking table fix is live  
+**Status:** Phase 0 + Phase 1 kickoff on `booking` · booking table + cancel/reschedule · staff RBAC  
 **Patient app:** http://localhost:8501  
-**Supplier portal:** http://localhost:8502  
-**Time:** ~10–12 minutes  
-**Full narration script:** [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)
+**Supplier portal:** http://localhost:8502 (`union`/`unionpass` or `nawaloka`/`nawalokapass`)  
+**Time:** ~10–14 minutes  
+**Full narration script:** [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md) · Status: [`PHASE_STATUS.md`](PHASE_STATUS.md)
 
 ---
 
@@ -173,11 +173,13 @@ come back in 2 weeks
 | 1 | `hello` |
 | 2 | `I have severe chest pain and can't breathe` |
 | 3 | `Book me with Dr. Sunil Perera tomorrow at 10:00` → **Book** a row |
-| 4 | `I need prices for Panadol and Amoxicillin` |
-| 5 | Portal: Losartan in-stock @ Union Chemists → `price of Losartan` |
+| 3b | **My appointments** → Cancel or Reschedule |
+| 4 | `I need prices for Panadol and Amoxicillin` (note Freshness column) |
+| 5 | Portal `:8502` login `union`/`unionpass` → Losartan in-stock → patient refresh |
+| 5b | Optional: `nawaloka`/`nawalokapass` → Today’s bookings / templates |
 | 6 | `Can you review my medical report?` → ambiguous sample |
 | 7 | Upload `sample_rx_en.png` → confirm → pharmacies |
-| 8 | `demo3` / `demo3pass` → `come back in 2 weeks` |
+| 8 | `demo3` / `demo3pass` → `come back in 2 weeks` (+ optional worker `--once`) |
 
 ---
 
@@ -191,4 +193,5 @@ come back in 2 weeks
 | Portal 8502 down | Start supplier portal command above |
 | ntfy silent | Open sidebar topic URL on phone; continue demo |
 
-**Logins:** `demo1`/`demo1pass` (EN) · `demo3`/`demo3pass` (SI) · `demo4`/`demo4pass` (TA)
+**Patient logins:** `demo1`/`demo1pass` (EN) · `demo3`/`demo3pass` (SI) · `demo4`/`demo4pass` (TA)  
+**Staff logins:** `union`/`unionpass` (pharmacy) · `nawaloka`/`nawalokapass` (hospital)

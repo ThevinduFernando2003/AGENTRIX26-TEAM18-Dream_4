@@ -1,9 +1,9 @@
 # MedBridge AI — Software Architecture Document (SAD)
 
 **Project:** MedBridge AI · AgenTrix 2026 · Team Dream_4 (TEAM18)  
-**Version:** 1.2  
-**Status:** Authoritative architecture baseline for upgrade Phases 0–3  
-**Related:** [`SRS.md`](SRS.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`architecture.md`](architecture.md) · [`DEFENSE.md`](DEFENSE.md)
+**Version:** 1.3  
+**Status:** As-built includes Phase 0 + Phase 1.1–1.7 on Streamlit; see [`PHASE_STATUS.md`](PHASE_STATUS.md)  
+**Related:** [`SRS.md`](SRS.md) · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`PHASE_STATUS.md`](PHASE_STATUS.md) · [`DEPLOY_RENDER.md`](DEPLOY_RENDER.md) · [`architecture.md`](architecture.md)
 
 ---
 
@@ -97,31 +97,32 @@ Detail diagrams: [`architecture.md`](architecture.md).
 
 ## 3. Target architecture by phase
 
-### Phase 0 — Stabilize (keep Streamlit/SQLite)
-
-Add without rewriting layers:
+### Phase 0 — Stabilize (keep Streamlit/SQLite) · **delivered**
 
 - `User.consent_accepted_at`  
 - `PharmacyMedicinePrice.updated_at` + UI badge  
-- `cancel_appointment` tool + history UI  
-- Reminder worker process (cron/APScheduler)  
-- Supplier portal session bind (pharmacy_id / facility_id + passcode/login)  
+- `cancel` + My Appointments panel  
+- Reminder worker (`project/workers/reminder_worker.py`)  
+- Supplier portal login (now unified `User` roles)  
 - GitHub Actions → `pytest`  
 - Doc alignment with heuristic-first router  
 
-### Phase 1 — Two-sided MVP
+### Phase 1 — Two-sided MVP · **kickoff delivered (1.1–1.7)**
 
 ```
-Patient UI (Streamlit or thin API clients)
+Patient UI (Streamlit)
 Hospital portal ──┐
-Pharmacy portal ──┼──► AuthZ (RBAC) ──► App services ──► Postgres
-Admin (minimal) ──┘                         │
-                                            ├── Booking (atomic)
-                                            ├── Catalog publish
-                                            └── Notify (ntfy + SMS)
+Pharmacy portal ──┼──► authz.py (RBAC) ──► services ──► SQLite | Postgres(DATABASE_URL)
+                  │                         │
+                  │                         ├── booking_agent (atomic book/cancel/reschedule)
+                  │                         ├── hospital_service / pharmacy_service
+                  │                         ├── db/repo.py seam
+                  │                         └── notify (ntfy + SMS stub/http)
 ```
 
-Roles: `patient` · `hospital_staff` · `pharmacy_staff` · `admin`.
+Roles on `User.role`: `patient` · `hospital_staff` · `pharmacy_staff` · `admin`.  
+Staff seed: `union` / `nawaloka` (see `seed_suppliers.json`).  
+Remaining for full pilot: family OTP, JWT, staging Postgres UAT, real SMS gateway.
 
 ### Phase 2 — Product platform
 

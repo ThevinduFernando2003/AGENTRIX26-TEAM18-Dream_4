@@ -3,7 +3,7 @@
 **Status:** Living upgrade roadmap (gap audit + narrative).  
 **Authoritative specs & delivery:** [`SRS.md`](SRS.md) v1.2 · [`SAD.md`](SAD.md) v1.2 · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`UAT_CHECKLIST.md`](UAT_CHECKLIST.md) · [`SAFETY_CHECKLIST.md`](SAFETY_CHECKLIST.md)
 
-**Current baseline:** Validated multi-agent **patient prototype** (Streamlit) + **concept supplier portal** (:8502) + SEED marketplace data + 52 offline tests + OpenAI/Gemini provider switch.
+**Current baseline:** Phase 0 + Phase 1.1–1.7 on branch `booking` — patient Streamlit + RBAC supplier portal (:8502) + cancel/reschedule + CSV + reminder worker + optional Postgres + SMS stub + ≈85 offline tests + OpenAI/Gemini (`GoogleModel` for pydantic-ai). See [`PHASE_STATUS.md`](PHASE_STATUS.md).
 
 ---
 
@@ -448,18 +448,17 @@ Agents call **typed tools**, never scrape HTML. Replacing seed with portal/POS i
 
 ---
 
-## 12. Immediate next 10 actions (start here)
+## 12. Immediate next actions (post Phase 1 kickoff)
 
-1. Fix `project/README.md` Tier-3 “out of scope” contradiction.  
-2. Align chatbot/README “CrewAI orchestrator” wording with heuristic-first reality.  
-3. Add `consent_accepted_at` on User + signup checkbox.  
-4. Add `updated_at` on `PharmacyMedicinePrice` + UI badge.  
-5. Implement appointment cancel in patient history.  
-6. Add APScheduler/cron for due reminders.  
-7. Bind supplier portal to pharmacy/hospital login (even simple).  
-8. Add GitHub Actions pytest workflow.  
-9. Write thin `docs/SRS.md` + `docs/SAD.md` from Sections 1–2 of this plan (formalize).  
-10. Run full UAT checklist (§8.2) and log defects in a living `TRIAGE.md`.  
+**Done (do not re-open as P0):** consent, freshness, cancel, reminder worker, supplier/RBAC login, CI, SRS/SAD, CSV, hospital templates/no-show, reschedule, repo seam, `DATABASE_URL`, emergency SMS adapter, GoogleModel CI fix.
+
+**Do next:**
+1. Execute and sign [`UAT_CHECKLIST.md`](UAT_CHECKLIST.md) on a clean DB.  
+2. Deploy patient (+ optional supplier) Streamlit on Render with Postgres — [`DEPLOY_RENDER.md`](DEPLOY_RENDER.md).  
+3. Wire a real SMS HTTP gateway for pilot emergency numbers.  
+4. Family phone OTP verification (FR-F02).  
+5. Staging Postgres soak + seed idempotency check.  
+6. Begin Phase 2 API shell only when pilot UX is validated (do not jump to Vercel yet).  
 
 ---
 

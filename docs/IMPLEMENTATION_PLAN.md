@@ -1,9 +1,12 @@
 # MedBridge AI — Implementation Plan (from SRS + SAD)
 
-**Version:** 1.0  
-**Based on:** [`SRS.md`](SRS.md) v1.2 · [`SAD.md`](SAD.md) v1.2  
+**Version:** 1.1  
+**Based on:** [`SRS.md`](SRS.md) v1.3 · [`SAD.md`](SAD.md) v1.3  
+**Living status:** [`PHASE_STATUS.md`](PHASE_STATUS.md)  
 **Companion gap narrative:** [`UPGRADE_PLAN.md`](UPGRADE_PLAN.md)  
 **Rule zero:** Structural safety is non-negotiable (SRS NFR-01 / SAD §2.4). No phase may weaken emergency-first, OCR confirm, atomic booking, or disagreement guards.
+
+**Delivery note (2026-08):** Phase 0 Initial 10 and Phase 1.1–1.7 are **implemented** on branch `booking` and published to `origin` only. Offline suite ≈ **85** tests.
 
 ---
 
@@ -17,6 +20,8 @@
 | `docs/UPGRADE_PLAN.md` | Long-form audit + backlog |
 | `docs/DEMO_STEPS_UPDATED.md` | Manual happy-path regression |
 | `docs/UAT_CHECKLIST.md` | Stakeholder UAT (created with this plan) |
+| `docs/PHASE_STATUS.md` | What is done vs remaining |
+| `docs/DEPLOY_RENDER.md` | Host Streamlit on Render (not Vercel) |
 
 ---
 
@@ -233,7 +238,7 @@ Keep Streamlit **or** introduce minimal FastAPI for portals; **must** introduce 
 ## 9. Test strategy (all phases)
 
 ### Automated
-- Keep existing 52 offline tests green always  
+- Keep offline suite green always (≈85 collected; grow with features)  
 - Add tests per Initial 10 item before merge  
 - CI blocks merge on failure (P0+)  
 

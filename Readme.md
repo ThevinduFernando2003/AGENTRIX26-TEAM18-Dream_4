@@ -27,12 +27,15 @@ MedBridge AI is a Streamlit-based conversational assistant that helps patients t
 
 | Document | Purpose |
 |---|---|
+| [`docs/PHASE_STATUS.md`](docs/PHASE_STATUS.md) | **What is done** (Phase 0 + Phase 1.1–1.7) |
 | [`docs/SRS.md`](docs/SRS.md) | Software Requirements Specification (FR/NFR, phases) |
 | [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document (as-built + target) |
 | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | Phase 0–3 delivery plan + Initial 10 tasks |
 | [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md) | Gap audit & stakeholder roadmap |
 | [`docs/UAT_CHECKLIST.md`](docs/UAT_CHECKLIST.md) | Stakeholder UAT sign-off |
 | [`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md) | Non-negotiable structural safety gates |
+| [`docs/DEPLOY_RENDER.md`](docs/DEPLOY_RENDER.md) | Host Streamlit on Render (Vercel not suitable yet) |
+| [`docs/CODEBASE_EXPLANATION.md`](docs/CODEBASE_EXPLANATION.md) | Path map / viva study sheet |
 
 ---
 
@@ -127,29 +130,32 @@ AGENTRIX26-TEAM18-Dream_4/
 ├── docs/
 │   └── rag.md                  # RAG subsystem technical reference
 │
-├── tests/                      # 52 offline tests — no API key needed
+├── tests/                      # ≈85 offline tests — no API key needed
 │   ├── conftest.py             # shared fixtures: seeded_db, chroma_tmp, no_api_key
-│   └── test_*.py               # auth, booking, chatbot, emergency, i18n, jsonutil,
-│                               # medicine, notifications, rag, reminders
+│   └── test_*.py               # auth, authz, booking, hospital, pharmacy, sms, …
 │
 └── project/
     ├── requirements.txt
-    ├── __init__.py
+    ├── llm.py                  # Gemini ↔ OpenAI; GoogleModel for pydantic-ai
+    ├── authz.py                # RBAC helpers
+    ├── hospital_service.py / pharmacy_service.py / supplier_auth.py
     │
     ├── agents/
-    │   ├── basic_chatbot.py    # Heuristic-first router + direct Gemini JSON call, chat threads, reminder detection
-    │   ├── booking_agent.py    # Pydantic AI typed booking + RAG-grounded doctor lookup
+    │   ├── basic_chatbot.py    # Heuristic-first router + LLM JSON when keyed
+    │   ├── booking_agent.py    # book / cancel / reschedule + Pydantic AI path
     │   ├── emergency.py        # Pure-regex screener (no LLM, no network)
-    │   ├── medicine_tracker.py # Pharmacy comparison, RAG fuzzy matching, OCR confirm
+    │   ├── medicine_tracker.py # Pharmacy comparison + freshness
     │   ├── moderator.py        # Consensus synthesis + disagreement guard
     │   ├── reminders.py        # Future-visit reminder service + ntfy push
     │   ├── specialist_panel.py # 3 parallel independent CrewAI specialists
-    │   └── vision_ocr.py       # Gemini Vision prescription transcription
+    │   └── vision_ocr.py       # Vision prescription transcription
+    │
+    ├── workers/
+    │   └── reminder_worker.py  # Background / --once due reminder poller
     │
     ├── db/
-    │   ├── schema.sql          # 17-table SQLite schema (idempotent CREATE IF NOT EXISTS)
-    │   ├── db.py               # get_conn(), init_db(), schema migration
-    │   └── seed.py             # Idempotent seed loader (hashes passwords on insert)
+    │   ├── schema.sql          # SQLite schema (Postgres via DATABASE_URL + pg_compat)
+    │   ├── db.py / repo.py / seed.py / pg_compat.py
     │
     ├── i18n/
     │   ├── translate.py        # Static i18n catalog (EN/SI/TA) + Gemini dynamic translation
@@ -169,7 +175,9 @@ AGENTRIX26-TEAM18-Dream_4/
     │                           # medicine, specialist panel, shared types)
     │
     ├── notifications/
-    │   └── ntfy_client.py      # HTTP POST to ntfy.sh + NotificationLog
+    │   ├── ntfy_client.py      # HTTP POST to ntfy.sh + NotificationLog
+    │   ├── sms_client.py       # Emergency SMS stub / HTTP gateway
+    │   └── notify.py           # Emergency family orchestration
     │
     ├── rag/
     │   ├── __init__.py         # Re-exports retrieve()
@@ -183,12 +191,14 @@ AGENTRIX26-TEAM18-Dream_4/
         ├── common.py           # Shared helpers: get_geo, lang_of, banners
         └── panels/
             ├── __init__.py     # Panel contract documentation
+            ├── appointments.py # My appointments — cancel / reschedule
             ├── booking.py      # Booking suggestions + slot confirmation
             ├── chat.py         # Chat history, voice input, intent router
-            ├── emergency.py    # Emergency panel (confirm → tel:1990 + ntfy)
-            ├── medicine.py     # Pharmacy comparison table
+            ├── emergency.py    # Emergency panel (confirm → tel:1990 + ntfy/SMS)
+            ├── medicine.py     # Pharmacy comparison table + freshness
             ├── prescription.py # OCR upload + user confirmation gate
             ├── report.py       # Specialist panel UI
+            ├── history.py      # Read-only activity timeline
             └── sidebar.py      # Sessions, language, location, reminders, logout
 ```
 
@@ -200,7 +210,7 @@ The SQLite database (`project/db/app.db`) has 17 tables:
 
 | Table | Purpose |
 |---|---|
-| `User` | Accounts with bcrypt-hashed passwords, preferred language, family contact |
+| `User` | Accounts: bcrypt, language, family contact, consent, **role** + pharmacy/facility bind |
 | `Conversation` | Named chat threads per user (ChatGPT-style) |
 | `ChatMessage` | Individual chat turns linked to a conversation |
 | `MedicalReport` | Uploaded/pasted report text |
@@ -319,7 +329,7 @@ pytest tests/test_booking.py -v
 
 All tests run fully offline. The `seeded_db` fixture redirects the database to a temporary file. The `chroma_tmp` fixture builds a throwaway Chroma index using local ONNX embeddings.
 
-GitHub Actions runs the same suite on push/PR to `booking` / `main` (see `.github/workflows/ci.yml`).
+GitHub Actions runs the same suite on push/PR to `booking` / `main` (see `.github/workflows/ci.yml`). Expect on the order of **85** collected tests (grows with features).
 
 ---
 

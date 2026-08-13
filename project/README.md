@@ -18,13 +18,13 @@ data**, labelled in the UI and the seed files.
 ---
 
 ## Tier 1 scope
-- Signup / login (bcrypt-hashed passwords)
-- Basic Agent Chatbot with persistent chat history (CrewAI + Gemini)
+- Signup / login (bcrypt-hashed passwords) + PDPA-style consent timestamp
+- Heuristic-first chatbot (keyword/regex router first; LLM JSON when keyed)
 - Rule-based emergency screener (runs **before** any LLM call)
-- Emergency flow: `tel:1990` link + ntfy.sh push to family contact
-- Booking Agent (Pydantic AI typed responses) with full-slot fallback
-- Medicine Tracker (text-input) — pharmacy comparison by total cost
-  and distance (live browser geolocation, manual entry fallback)
+- Emergency flow: `tel:1990` + ntfy (+ optional SMS adapter)
+- Booking Agent (Pydantic AI typed responses) with full-slot fallback,
+  cancel, and reschedule
+- Medicine Tracker — pharmacy comparison + freshness badges
 
 ## Tier 3 scope
 - **Sinhala / Tamil / English UI** — a static `i18n` catalog covers
@@ -37,12 +37,10 @@ data**, labelled in the UI and the seed files.
 - **Free-form reply translation** — when the user prefers Sinhala or
   Tamil, the chatbot's English reply is translated via Gemini before
   persistence. Cached per process to spare the free-tier quota.
-- **Future-visit reminders** — rule-based regex inside the chatbot
-  detects "come back in 2 weeks / next month / on YYYY-MM-DD",
-  persists a `FutureVisitReminder` row. Sidebar **🔔 Check my
-  reminders** button finds rows due within 7 days and fires an ntfy
-  push per reminder; `notified=1` flips on success, idempotent on
-  re-click.
+- **Future-visit reminders** — regex detector persists
+  `FutureVisitReminder`; sidebar button **or**
+  `python -m project.workers.reminder_worker` fires due pushes
+  (`notified=1`, idempotent).
 
 ## Tier 2 scope
 - **Specialist Panel** — three CrewAI agents (cardiology, internal
@@ -62,8 +60,11 @@ data**, labelled in the UI and the seed files.
   `report_review_complete` (panel ready) and
   `prescription_confirmed` (after the user OKs OCR).
 
-Tier 3 (voice, full Sinhala/Tamil UI strings, future-visit reminder
-scheduling) is deliberately out of scope for this build.
+## Phase 0 / 1 additions (branch `booking`)
+- Supplier portal RBAC (`pharmacy_staff` / `hospital_staff` on `User`)
+- Hospital: today’s bookings, no-show, slot templates
+- Pharmacy CSV import; optional Postgres via `DATABASE_URL`
+- See root [`docs/PHASE_STATUS.md`](../docs/PHASE_STATUS.md)
 
 ---
 
