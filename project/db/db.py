@@ -133,8 +133,10 @@ def init_db(seed: bool = True) -> None:
     conn.commit()
     _migrate(conn)
     if seed:
-        from .seed import load_seed_if_empty  # local import to avoid cycle
+        from .seed import ensure_supplier_accounts, load_seed_if_empty  # local import to avoid cycle
         load_seed_if_empty()
+        # Supplier accounts can land on DBs that already had patient seed.
+        ensure_supplier_accounts()
 
 
 if __name__ == "__main__":

@@ -161,3 +161,15 @@ CREATE TABLE IF NOT EXISTS NotificationLog (
     channel  TEXT NOT NULL,
     sent_at  TEXT DEFAULT (datetime('now'))
 );
+
+-- Phase 0: supplier portal accounts (pharmacy or hospital-bound).
+CREATE TABLE IF NOT EXISTS SupplierAccount (
+    supplier_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    username     TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role         TEXT NOT NULL CHECK(role IN ('pharmacy', 'hospital')),
+    pharmacy_id  INTEGER REFERENCES Pharmacy(pharmacy_id),
+    facility_id  INTEGER REFERENCES Facility(facility_id),
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+

@@ -273,6 +273,14 @@ python -m project.workers.reminder_worker
 
 Seed user `demo1` has a near-due reminder so `--once` exercises the path after DB init.
 
+### Supplier portal
+
+```bash
+streamlit run project/ui/supplier_portal.py --server.port 8502
+```
+
+Login required (SEED accounts): **union** / **unionpass** (Union Chemists pharmacy), **nawaloka** / **nawalokapass** (Nawaloka Hospital). Edits are scoped to the bound org only.
+
 ---
 
 ## Building the RAG Index

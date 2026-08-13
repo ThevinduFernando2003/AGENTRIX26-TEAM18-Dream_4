@@ -165,6 +165,46 @@ def _seed_pharmacies() -> None:
     conn.commit()
 
 
+def ensure_supplier_accounts() -> None:
+    """Idempotent supplier portal accounts (safe on already-seeded patient DBs)."""
+    conn = get_conn()
+    if conn.execute("SELECT COUNT(*) AS n FROM SupplierAccount").fetchone()["n"] > 0:
+        return
+    # Need orgs present; skip quietly if patient seed never ran.
+    if conn.execute("SELECT COUNT(*) AS n FROM Pharmacy").fetchone()["n"] == 0:
+        return
+    data = _load("seed_suppliers.json")
+    for acc in data.get("accounts", []):
+        role = acc["role"]
+        pharmacy_id = None
+        facility_id = None
+        if role == "pharmacy":
+            row = conn.execute(
+                "SELECT pharmacy_id FROM Pharmacy WHERE name = ?", (acc["org_name"],)
+            ).fetchone()
+            if not row:
+                logger.warning("Supplier seed: pharmacy %r not found", acc["org_name"])
+                continue
+            pharmacy_id = row["pharmacy_id"]
+        elif role == "hospital":
+            row = conn.execute(
+                "SELECT facility_id FROM Facility WHERE name = ?", (acc["org_name"],)
+            ).fetchone()
+            if not row:
+                logger.warning("Supplier seed: facility %r not found", acc["org_name"])
+                continue
+            facility_id = row["facility_id"]
+        else:
+            continue
+        conn.execute(
+            """INSERT INTO SupplierAccount(username, password_hash, role, pharmacy_id, facility_id)
+               VALUES(?,?,?,?,?)""",
+            (acc["username"], _hash_pw(acc["password"]), role, pharmacy_id, facility_id),
+        )
+    conn.commit()
+    logger.info("Seeded SupplierAccount rows (SEED DATA — not live).")
+
+
 def _seed_reminders() -> None:
     """Give demo1 one near-due future-visit reminder so the Tier-3 push demo
     fires in a single click. Idempotent: skips if demo1 already has a reminder.
@@ -197,6 +237,7 @@ def load_seed_if_empty() -> None:
     _seed_facilities()
     _seed_medicines()
     _seed_pharmacies()
+    ensure_supplier_accounts()
     _seed_reminders()
     logger.info("Seed complete.")
 
