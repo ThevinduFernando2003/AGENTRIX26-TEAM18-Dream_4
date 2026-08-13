@@ -259,6 +259,28 @@ streamlit run project/ui/app.py
 
 The app will open at `http://localhost:8501`.
 
+### Reminder worker (optional)
+
+The sidebar **Check my reminders** button still works as a manual override. To fire due follow-up reminders automatically (ntfy push, once per row):
+
+```bash
+# One-shot (demo / CI)
+python -m project.workers.reminder_worker --once
+
+# Poll loop (default every 60s; override with REMINDER_POLL_SECONDS)
+python -m project.workers.reminder_worker
+```
+
+Seed user `demo1` has a near-due reminder so `--once` exercises the path after DB init.
+
+### Supplier portal
+
+```bash
+streamlit run project/ui/supplier_portal.py --server.port 8502
+```
+
+Login required (SEED staff on the unified `User` table): **union** / **unionpass** (`pharmacy_staff` · Union Chemists), **nawaloka** / **nawalokapass** (`hospital_staff` · Nawaloka). Edits are scoped to the bound org only; staff cannot log into the patient app.
+
 ---
 
 ## Building the RAG Index
@@ -297,6 +319,8 @@ pytest tests/test_booking.py -v
 
 All tests run fully offline. The `seeded_db` fixture redirects the database to a temporary file. The `chroma_tmp` fixture builds a throwaway Chroma index using local ONNX embeddings.
 
+GitHub Actions runs the same suite on push/PR to `booking` / `main` (see `.github/workflows/ci.yml`).
+
 ---
 
 ## Environment Variables
@@ -310,6 +334,10 @@ Configure these in `project/.env`:
 | `NTFY_TOPIC_PREFIX` | `medbridge-demo` | No | ntfy.sh topic prefix — per-user topic = `{prefix}-{user_id}` |
 | `NTFY_BASE` | `https://ntfy.sh` | No | ntfy.sh base URL (self-hosted option) |
 | `RAG_EMBED_BACKEND` | `local` | No | `local` (ONNX) or `gemini` for embeddings |
+| `DATABASE_URL` | — | No | If `postgresql://…`, use Postgres (needs `psycopg`); else SQLite. CI stays on SQLite. |
+| `SMS_PROVIDER` | `stub` | No | Emergency SMS: `stub` (offline) or `http` gateway |
+| `SMS_HTTP_URL` | — | If http | Gateway endpoint for emergency SMS |
+| `SMS_STUB_OK` | `1` | No | Set `0` to simulate stub SMS failure |
 
 ---
 

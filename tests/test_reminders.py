@@ -56,3 +56,28 @@ def test_fire_marks_notified_and_is_idempotent(seeded_db, monkeypatch):
     assert row["notified"] == 1
     # Already notified → firing again sends nothing.
     assert reminders.fire(3, [rid]) == 0
+
+
+def test_process_due_fires_once_across_users(seeded_db, monkeypatch):
+    monkeypatch.setattr(reminders, "ntfy_send", lambda **kwargs: True)
+    today = datetime.date.today()
+    near = (today + datetime.timedelta(days=2)).isoformat()
+    conn = seeded_db.get_conn()
+    # Clear seed reminder(s) so the count is deterministic.
+    conn.execute("DELETE FROM FutureVisitReminder")
+    conn.execute(
+        "INSERT INTO FutureVisitReminder(user_id, target_date_or_month, notified) VALUES(1,?,0)",
+        (near,),
+    )
+    conn.execute(
+        "INSERT INTO FutureVisitReminder(user_id, target_date_or_month, notified) VALUES(2,?,0)",
+        (near,),
+    )
+    conn.commit()
+
+    assert reminders.process_due(days=7, today=today) == 2
+    assert reminders.process_due(days=7, today=today) == 0
+    notified = conn.execute(
+        "SELECT COUNT(*) AS n FROM FutureVisitReminder WHERE notified = 1"
+    ).fetchone()["n"]
+    assert notified == 2

@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS User (
     family_contact_phone TEXT,
     -- PDPA-style health-data processing consent (ISO timestamp); required for new signups.
     consent_accepted_at  TEXT,
+    -- Phase 1 RBAC: patient | pharmacy_staff | hospital_staff | admin
+    -- pharmacy_id / facility_id are org binds (no FK here — Pharmacy/Facility
+    -- are created later in this script; app + authz enforce validity).
+    role                 TEXT NOT NULL DEFAULT 'patient'
+                         CHECK(role IN ('patient','pharmacy_staff','hospital_staff','admin')),
+    pharmacy_id          INTEGER,
+    facility_id          INTEGER,
     created_at           TEXT DEFAULT (datetime('now'))
 );
 
@@ -101,10 +108,14 @@ CREATE INDEX IF NOT EXISTS idx_slot_doctor_date ON AppointmentSlot(doctor_id, da
 CREATE TABLE IF NOT EXISTS Appointment (
     appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id        INTEGER NOT NULL REFERENCES User(user_id),
-    slot_id        INTEGER NOT NULL UNIQUE REFERENCES AppointmentSlot(slot_id),
+    -- slot_id is not globally UNIQUE: cancelled rows keep history; only one
+    -- confirmed appointment may hold a slot (see idx_appt_slot_confirmed).
+    slot_id        INTEGER NOT NULL REFERENCES AppointmentSlot(slot_id),
     status         TEXT NOT NULL DEFAULT 'confirmed',
     booked_at      TEXT DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_appt_slot_confirmed
+    ON Appointment(slot_id) WHERE status = 'confirmed';
 
 CREATE TABLE IF NOT EXISTS FutureVisitReminder (
     reminder_id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,6 +155,8 @@ CREATE TABLE IF NOT EXISTS PharmacyMedicinePrice (
     medicine_id INTEGER NOT NULL REFERENCES Medicine(medicine_id),
     price       REAL NOT NULL,
     in_stock    INTEGER NOT NULL DEFAULT 1,
+    -- Phase 0: bumped on every supplier edit; seed rows get created_at-style stamp.
+    updated_at  TEXT DEFAULT (datetime('now')),
     UNIQUE(pharmacy_id, medicine_id)
 );
 
@@ -155,3 +168,15 @@ CREATE TABLE IF NOT EXISTS NotificationLog (
     channel  TEXT NOT NULL,
     sent_at  TEXT DEFAULT (datetime('now'))
 );
+
+-- Phase 0: supplier portal accounts (pharmacy or hospital-bound).
+CREATE TABLE IF NOT EXISTS SupplierAccount (
+    supplier_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    username     TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role         TEXT NOT NULL CHECK(role IN ('pharmacy', 'hospital')),
+    pharmacy_id  INTEGER REFERENCES Pharmacy(pharmacy_id),
+    facility_id  INTEGER REFERENCES Facility(facility_id),
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+

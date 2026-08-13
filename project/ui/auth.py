@@ -53,8 +53,8 @@ def signup(
     conn.execute(
         """INSERT INTO User(username, password_hash, full_name, age, gender,
                             preferred_language, family_contact_name, family_contact_phone,
-                            consent_accepted_at)
-           VALUES(?,?,?,?,?,?,?,?,?)""",
+                            consent_accepted_at, role)
+           VALUES(?,?,?,?,?,?,?,?,?, 'patient')""",
         (
             username,
             _hash_pw(password),
@@ -72,13 +72,17 @@ def signup(
 
 
 def login(username: str, password: str) -> Optional[int]:
+    """Patient-app login. Staff accounts must use the supplier portal."""
     conn = get_conn()
     row = conn.execute(
-        "SELECT user_id, password_hash FROM User WHERE username = ?", (username,)
+        "SELECT user_id, password_hash, role FROM User WHERE username = ?", (username,)
     ).fetchone()
     if not row:
         return None
     if not _verify_pw(password, row["password_hash"]):
+        return None
+    role = (row["role"] or "patient").strip()
+    if role != "patient":
         return None
     return int(row["user_id"])
 
@@ -87,7 +91,8 @@ def load_user(user_id: int) -> Optional[dict]:
     conn = get_conn()
     row = conn.execute(
         """SELECT user_id, username, full_name, age, gender, preferred_language,
-                  family_contact_name, family_contact_phone, consent_accepted_at
+                  family_contact_name, family_contact_phone, consent_accepted_at,
+                  role, pharmacy_id, facility_id
            FROM User WHERE user_id = ?""",
         (user_id,),
     ).fetchone()

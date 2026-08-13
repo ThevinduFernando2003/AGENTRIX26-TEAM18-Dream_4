@@ -71,6 +71,7 @@ from project.db.db import init_db  # noqa: E402
 from project.ui import common  # noqa: E402
 from project.ui.auth import render_auth_gate  # noqa: E402
 from project.ui.panels import (  # noqa: E402
+    appointments,
     booking,
     chat,
     emergency,
@@ -116,6 +117,9 @@ def main() -> None:
     medicine.render(user)
     report.render(user)
     prescription.render(user)
+
+    # Confirmed appointments + cancel (Phase 0 / FR-P08).
+    appointments.render(user)
 
     # Read-only cross-domain activity timeline (collapsed by default).
     history.render(user)

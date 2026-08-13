@@ -1,0 +1,23 @@
+{
+  "_note": "SEED DATA — not live. Plaintext passwords hashed by the loader. Bound to pharmacy/facility by name.",
+  "accounts": [
+    {
+      "username": "union",
+      "password": "unionpass",
+      "role": "pharmacy",
+      "org_name": "Union Chemists"
+    },
+    {
+      "username": "healthguard",
+      "password": "healthguardpass",
+      "role": "pharmacy",
+      "org_name": "Healthguard Pharmacy"
+    },
+    {
+      "username": "nawaloka",
+      "password": "nawalokapass",
+      "role": "hospital",
+      "org_name": "Nawaloka Hospital"
+    }
+  ]
+}

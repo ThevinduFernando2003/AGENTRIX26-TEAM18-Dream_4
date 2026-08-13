@@ -260,19 +260,15 @@ Run [`UAT_CHECKLIST.md`](UAT_CHECKLIST.md) at Phase 0 exit and every phase exit.
 
 ---
 
-## 11. Immediate next actions (start coding)
+## 11. Immediate next actions
 
-1. Link `SRS` / `SAD` / `IMPLEMENTATION_PLAN` from root `Readme.md` (doc cleanup #9).  
-2. Add `.github/workflows/ci.yml` (#6).  
-3. Implement consent migration + signup (#1).  
-4. Implement freshness (#2).  
-5. Implement cancel (#3).  
-6. Reminder worker (#4).  
-7. Supplier login (#5).  
-8. Run UAT checklist (#8).  
-9. Safety checklist file (#10).  
+Phase 0 Initial 10 and Phase 1.1–1.7 kickoff are implemented on `booking` (push `origin` only).
 
-**Do not start Phase 1 RBAC/Postgres until Phase 0 exit criteria pass.**
+**Phase 1 remaining / pilot hardening:**
+1. Run full UAT checklist against staff portals + reschedule + CSV.  
+2. Point a staging Postgres via `DATABASE_URL` and verify seed.  
+3. Wire a real SMS HTTP gateway for pilot emergency numbers.  
+4. Pilot: 1 hospital OPD + 1 pharmacy branch live publish.
 
 ---
 

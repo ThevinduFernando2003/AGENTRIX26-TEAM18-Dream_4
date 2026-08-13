@@ -1,4 +1,4 @@
-"""Emergency panel: rule-based detection → confirm → tel:1990 link + ntfy push.
+"""Emergency panel: rule-based detection → confirm → tel:1990 + ntfy/SMS.
 
 Renders only when ``chat.py`` has flagged a possible emergency via
 ``st.session_state["pending_emergency"]``.
@@ -13,7 +13,7 @@ import streamlit as st
 from ..common import disclaimer, lang_of
 from ...agents.basic_chatbot import persist_message
 from ...i18n.translate import t
-from ...notifications.ntfy_client import send as ntfy_send, topic_for_user
+from ...notifications.notify import notify_emergency_family
 
 
 def render(user: dict) -> None:
@@ -29,23 +29,12 @@ def render(user: dict) -> None:
     with c1:
         if st.button(t("em.confirm", lang), type="primary", use_container_width=True):
             st.session_state["emergency_confirmed"] = True
-            topic = topic_for_user(user["user_id"])
-            ok = ntfy_send(
-                topic=topic,
-                title="MedBridge AI: emergency alert",
-                message=(
-                    f"{user.get('full_name') or user['username']} flagged a possible emergency: "
-                    f"{', '.join(em.get('matched_terms', []))}. They have been directed to dial 1990."
-                ),
-                user_id=user["user_id"],
-                priority="urgent",
-                tags=["rotating_light", "ambulance"],
-                notif_type="emergency",
-            )
-            st.session_state["emergency_push_ok"] = ok
-            # Persist the assistant turn so chat history reflects what happened.
+            result = notify_emergency_family(user, em.get("matched_terms") or [])
+            st.session_state["emergency_push_ok"] = bool(result.get("ntfy"))
+            st.session_state["emergency_sms_ok"] = result.get("sms")
             persist_message(
-                user["user_id"], "assistant",
+                user["user_id"],
+                "assistant",
                 "Emergency flow triggered. Please call 1990 immediately. Your family contact has been notified.",
             )
             st.rerun()
@@ -53,7 +42,8 @@ def render(user: dict) -> None:
         if st.button(t("em.dismiss", lang), use_container_width=True):
             st.session_state.pop("pending_emergency", None)
             persist_message(
-                user["user_id"], "assistant",
+                user["user_id"],
+                "assistant",
                 "Understood — flagging as a false alarm. Tell me more about how you're feeling.",
             )
             st.rerun()
@@ -70,8 +60,18 @@ def render(user: dict) -> None:
             st.success(f"{t('em.family_notified', lang)} ({datetime.now().strftime('%H:%M:%S')})")
         else:
             st.warning(t("em.push_failed", lang))
+        sms_ok = st.session_state.get("emergency_sms_ok")
+        if sms_ok is True:
+            st.success(t("em.sms_sent", lang))
+        elif sms_ok is False:
+            st.warning(t("em.sms_failed", lang))
         if st.button(t("em.dismiss_continue", lang)):
-            for k in ("pending_emergency", "emergency_confirmed", "emergency_push_ok"):
+            for k in (
+                "pending_emergency",
+                "emergency_confirmed",
+                "emergency_push_ok",
+                "emergency_sms_ok",
+            ):
                 st.session_state.pop(k, None)
             st.rerun()
 

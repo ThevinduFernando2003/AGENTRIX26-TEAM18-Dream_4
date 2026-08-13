@@ -158,10 +158,75 @@ def _seed_pharmacies() -> None:
             if exists:
                 continue
             conn.execute(
-                "INSERT INTO PharmacyMedicinePrice(pharmacy_id, medicine_id, price, in_stock) VALUES(?,?,?,?)",
+                """INSERT INTO PharmacyMedicinePrice(pharmacy_id, medicine_id, price, in_stock, updated_at)
+                   VALUES(?,?,?,?,datetime('now'))""",
                 (pharmacy_id, med["medicine_id"], info["price"], 1 if info.get("in_stock", True) else 0),
             )
     conn.commit()
+
+
+def ensure_staff_accounts() -> None:
+    """Idempotent Phase-1 staff User rows from seed_suppliers.json."""
+    conn = get_conn()
+    if conn.execute("SELECT COUNT(*) AS n FROM Pharmacy").fetchone()["n"] == 0:
+        return
+    data = _load("seed_suppliers.json")
+    created = 0
+    for acc in data.get("accounts", []):
+        legacy_role = acc["role"]
+        pharmacy_id = None
+        facility_id = None
+        if legacy_role == "pharmacy":
+            role = "pharmacy_staff"
+            row = conn.execute(
+                "SELECT pharmacy_id FROM Pharmacy WHERE name = ?", (acc["org_name"],)
+            ).fetchone()
+            if not row:
+                logger.warning("Staff seed: pharmacy %r not found", acc["org_name"])
+                continue
+            pharmacy_id = row["pharmacy_id"]
+        elif legacy_role == "hospital":
+            role = "hospital_staff"
+            row = conn.execute(
+                "SELECT facility_id FROM Facility WHERE name = ?", (acc["org_name"],)
+            ).fetchone()
+            if not row:
+                logger.warning("Staff seed: facility %r not found", acc["org_name"])
+                continue
+            facility_id = row["facility_id"]
+        else:
+            continue
+        existing = conn.execute(
+            "SELECT user_id FROM User WHERE username = ?", (acc["username"],)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE User SET role = ?, pharmacy_id = ?, facility_id = ?
+                   WHERE user_id = ?""",
+                (role, pharmacy_id, facility_id, existing["user_id"]),
+            )
+            continue
+        conn.execute(
+            """INSERT INTO User(username, password_hash, full_name, role, pharmacy_id, facility_id,
+                                preferred_language, consent_accepted_at)
+               VALUES(?,?,?,?,?,?, 'en', datetime('now'))""",
+            (
+                acc["username"],
+                _hash_pw(acc["password"]),
+                acc["org_name"],
+                role,
+                pharmacy_id,
+                facility_id,
+            ),
+        )
+        created += 1
+    conn.commit()
+    if created:
+        logger.info("Seeded %s staff User rows (SEED DATA — not live).", created)
+
+
+# Back-compat alias for older call sites / docs.
+ensure_supplier_accounts = ensure_staff_accounts
 
 
 def _seed_reminders() -> None:
@@ -196,6 +261,7 @@ def load_seed_if_empty() -> None:
     _seed_facilities()
     _seed_medicines()
     _seed_pharmacies()
+    ensure_staff_accounts()
     _seed_reminders()
     logger.info("Seed complete.")
 

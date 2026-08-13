@@ -12,8 +12,9 @@ import logging
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
-from ..db.db import get_conn
+from ..db.repo import connection as get_conn
 from ..models import (
     MedicinePriceItem,
     MedicineQuoteResult,
@@ -24,6 +25,26 @@ from ..rag import retrieve
 from . import vision_ocr
 
 logger = logging.getLogger("medbridge.medicine")
+
+
+def freshness_label(updated_at: str | None) -> str:
+    """Human label for pharmacy price freshness (Phase 0)."""
+    if not updated_at:
+        return "SEED"
+    raw = updated_at.strip().replace("Z", "+00:00")
+    try:
+        ts = datetime.fromisoformat(raw)
+    except ValueError:
+        return "SEED"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age_h = max(0.0, (datetime.now(timezone.utc) - ts.astimezone(timezone.utc)).total_seconds() / 3600.0)
+    if age_h < 1:
+        return "Updated <1h ago"
+    if age_h < 24:
+        return f"Updated {int(age_h)}h ago"
+    days = int(age_h // 24)
+    return f"Updated {days}d ago"
 
 # RAG resolution thresholds. A small embedding model rates *any* drug-like token as
 # similar to *every* catalog drug, so cosine score alone gives false positives
@@ -113,7 +134,7 @@ def quotes_for(medicine_ids: list[int]) -> list[PharmacyQuote]:
     rows = conn.execute(
         f"""SELECT p.pharmacy_id, p.name AS pharmacy_name, p.address, p.lat, p.lng,
                    m.medicine_id, m.name AS medicine_name,
-                   pmp.price, pmp.in_stock
+                   pmp.price, pmp.in_stock, pmp.updated_at
             FROM Pharmacy p
             JOIN PharmacyMedicinePrice pmp ON pmp.pharmacy_id = p.pharmacy_id
             JOIN Medicine m ON m.medicine_id = pmp.medicine_id
@@ -133,6 +154,7 @@ def quotes_for(medicine_ids: list[int]) -> list[PharmacyQuote]:
                 "lng": r["lng"],
                 "items": [],
                 "missing_ids": set(medicine_ids),
+                "updated_ats": [],
             },
         )
         if r["in_stock"]:
@@ -144,6 +166,8 @@ def quotes_for(medicine_ids: list[int]) -> list[PharmacyQuote]:
                 )
             )
             ph["missing_ids"].discard(r["medicine_id"])
+            if r["updated_at"]:
+                ph["updated_ats"].append(r["updated_at"])
 
     # Resolve missing medicine_ids to names for display.
     name_lookup = {mid: name for mid, name in _all_medicine_names()}
@@ -153,6 +177,8 @@ def quotes_for(medicine_ids: list[int]) -> list[PharmacyQuote]:
         if not ph["items"]:
             continue
         missing = sorted(name_lookup.get(mid, f"#{mid}") for mid in ph["missing_ids"])
+        # Oldest stamp among in-stock lines = most conservative freshness signal.
+        oldest = min(ph["updated_ats"]) if ph["updated_ats"] else None
         quotes.append(
             PharmacyQuote(
                 pharmacy_id=ph["pharmacy_id"],
@@ -161,6 +187,8 @@ def quotes_for(medicine_ids: list[int]) -> list[PharmacyQuote]:
                 items=ph["items"],
                 total_cost=round(sum(i.price for i in ph["items"]), 2),
                 missing=missing,
+                updated_at=oldest,
+                freshness_label=freshness_label(oldest),
             )
         )
     return quotes
