@@ -334,6 +334,7 @@ Configure these in `project/.env`:
 | `NTFY_TOPIC_PREFIX` | `medbridge-demo` | No | ntfy.sh topic prefix — per-user topic = `{prefix}-{user_id}` |
 | `NTFY_BASE` | `https://ntfy.sh` | No | ntfy.sh base URL (self-hosted option) |
 | `RAG_EMBED_BACKEND` | `local` | No | `local` (ONNX) or `gemini` for embeddings |
+| `DATABASE_URL` | — | No | If `postgresql://…`, use Postgres (needs `psycopg`); else SQLite. CI stays on SQLite. |
 
 ---
 

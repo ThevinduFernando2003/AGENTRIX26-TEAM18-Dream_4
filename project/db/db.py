@@ -1,32 +1,61 @@
-"""SQLite connection helper + one-shot init_db().
+"""DB connection helper + one-shot init_db().
 
-A single SQLite file lives at project/db/app.db. Connections are
-per-thread because Streamlit reruns scripts on a single thread per
-session but background callbacks may not be.
+Default: SQLite file at project/db/app.db.
+Optional Phase 1.6: set DATABASE_URL=postgresql://… to use Postgres
+(via psycopg + pg_compat shim). CI and local demos stay on SQLite.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import threading
 from pathlib import Path
+from typing import Any
 
 _DB_DIR = Path(__file__).resolve().parent
 DB_PATH = _DB_DIR / "app.db"
 SCHEMA_PATH = _DB_DIR / "schema.sql"
 
 _local = threading.local()
+logger = logging.getLogger("medbridge.db")
 
 
-def get_conn() -> sqlite3.Connection:
+def using_postgres() -> bool:
+    url = os.environ.get("DATABASE_URL", "").strip().lower()
+    return url.startswith("postgres://") or url.startswith("postgresql://")
+
+
+def get_conn() -> Any:
     conn = getattr(_local, "conn", None)
-    if conn is None:
-        conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False)
+    if conn is not None:
+        return conn
+    if using_postgres():
+        conn = _connect_postgres()
+    else:
+        conn = sqlite3.connect(
+            DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False
+        )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        _local.conn = conn
+    _local.conn = conn
     return conn
+
+
+def _connect_postgres() -> Any:
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is set but psycopg is not installed. "
+            "pip install 'psycopg[binary]>=3.1'"
+        ) from exc
+    from .pg_compat import PgConnection
+
+    raw = psycopg.connect(os.environ["DATABASE_URL"].strip())
+    logger.info("Connected via DATABASE_URL (Postgres)")
+    return PgConnection(raw)
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -184,9 +213,14 @@ def init_db(seed: bool = True) -> None:
     """Create tables if missing and (optionally) load seed data."""
     conn = get_conn()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-        conn.executescript(f.read())
-    conn.commit()
-    _migrate(conn)
+        script = f.read()
+    if using_postgres():
+        conn.executescript(script)
+        # SQLite-specific PRAGMA migrations do not apply; schema.sql is source of truth.
+    else:
+        conn.executescript(script)
+        conn.commit()
+        _migrate(conn)
     if seed:
         from .seed import ensure_staff_accounts, load_seed_if_empty  # local import to avoid cycle
         load_seed_if_empty()
@@ -196,4 +230,5 @@ def init_db(seed: bool = True) -> None:
 
 if __name__ == "__main__":
     init_db()
-    print(f"DB initialized at {DB_PATH}")
+    target = "Postgres (DATABASE_URL)" if using_postgres() else str(DB_PATH)
+    print(f"DB initialized at {target}")
