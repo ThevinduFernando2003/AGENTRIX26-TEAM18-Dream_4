@@ -101,10 +101,14 @@ CREATE INDEX IF NOT EXISTS idx_slot_doctor_date ON AppointmentSlot(doctor_id, da
 CREATE TABLE IF NOT EXISTS Appointment (
     appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id        INTEGER NOT NULL REFERENCES User(user_id),
-    slot_id        INTEGER NOT NULL UNIQUE REFERENCES AppointmentSlot(slot_id),
+    -- slot_id is not globally UNIQUE: cancelled rows keep history; only one
+    -- confirmed appointment may hold a slot (see idx_appt_slot_confirmed).
+    slot_id        INTEGER NOT NULL REFERENCES AppointmentSlot(slot_id),
     status         TEXT NOT NULL DEFAULT 'confirmed',
     booked_at      TEXT DEFAULT (datetime('now'))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_appt_slot_confirmed
+    ON Appointment(slot_id) WHERE status = 'confirmed';
 
 CREATE TABLE IF NOT EXISTS FutureVisitReminder (
     reminder_id            INTEGER PRIMARY KEY AUTOINCREMENT,

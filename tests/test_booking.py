@@ -35,6 +35,36 @@ def test_book_is_atomic_no_double_book(seeded_db, no_api_key):
     assert second is None  # slot already taken → no double-book
 
 
+def test_cancel_frees_slot_and_blocks_others(seeded_db, no_api_key):
+    resp = b.process(b.BookingContext(user_id=1, extracted={"specialty": "Cardiology"}))
+    slot_id = resp.alternatives[0].slot_id
+    booked = b.book(user_id=1, slot_id=slot_id)
+    assert booked is not None
+
+    # Another user cannot cancel this appointment.
+    assert b.cancel(user_id=999, appointment_id=booked.appointment_id) is None
+
+    cancelled = b.cancel(user_id=1, appointment_id=booked.appointment_id)
+    assert cancelled is not None
+    assert cancelled.appointment_id == booked.appointment_id
+
+    rows = b.list_appointments(1, include_cancelled=True)
+    match = next(r for r in rows if r["appointment_id"] == booked.appointment_id)
+    assert match["status"] == "cancelled"
+    assert match["is_available"] == 1
+
+    # Slot can be booked again after cancel.
+    again = b.book(user_id=1, slot_id=slot_id)
+    assert again is not None
+
+
+def test_cancel_idempotent_second_call_fails(seeded_db, no_api_key):
+    resp = b.process(b.BookingContext(user_id=1, extracted={"specialty": "Cardiology"}))
+    booked = b.book(user_id=1, slot_id=resp.alternatives[0].slot_id)
+    assert b.cancel(user_id=1, appointment_id=booked.appointment_id) is not None
+    assert b.cancel(user_id=1, appointment_id=booked.appointment_id) is None
+
+
 def test_parse_date_weekday_phrase():
     # Step 5: "next <weekday>" resolves to the next future occurrence (Sun 2026-06-21).
     today = datetime.date(2026, 6, 21)

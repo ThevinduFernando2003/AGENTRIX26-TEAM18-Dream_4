@@ -88,6 +88,43 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
+    # Phase 0: allow cancelled appointments to retain slot_id history.
+    # Old schemas used UNIQUE(slot_id) on the table; rebuild once if needed.
+    appt_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='Appointment'"
+    ).fetchone()
+    needs_rebuild = bool(
+        appt_sql
+        and appt_sql["sql"]
+        and "slot_id" in appt_sql["sql"]
+        and "UNIQUE" in appt_sql["sql"].upper()
+    )
+    if needs_rebuild:
+        conn.executescript(
+            """
+            PRAGMA foreign_keys = OFF;
+            CREATE TABLE Appointment__new (
+                appointment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        INTEGER NOT NULL REFERENCES User(user_id),
+                slot_id        INTEGER NOT NULL REFERENCES AppointmentSlot(slot_id),
+                status         TEXT NOT NULL DEFAULT 'confirmed',
+                booked_at      TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO Appointment__new
+                (appointment_id, user_id, slot_id, status, booked_at)
+                SELECT appointment_id, user_id, slot_id, status, booked_at FROM Appointment;
+            DROP TABLE Appointment;
+            ALTER TABLE Appointment__new RENAME TO Appointment;
+            PRAGMA foreign_keys = ON;
+            """
+        )
+        conn.commit()
+    conn.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS idx_appt_slot_confirmed
+           ON Appointment(slot_id) WHERE status = 'confirmed'"""
+    )
+    conn.commit()
+
 
 def init_db(seed: bool = True) -> None:
     """Create tables if missing and (optionally) load seed data."""

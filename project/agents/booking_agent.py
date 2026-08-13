@@ -9,6 +9,8 @@ The Basic Chatbot has already extracted structured fields
 - `nearest_alternatives(doctor_id, target_dt)` — ±7-day window sorted
   by proximity.
 - `book(user_id, slot_id)` — atomic appointment insert + slot flip.
+- `cancel(user_id, appointment_id)` — patient cancels own confirmed appt + frees slot.
+- `list_appointments(user_id)` — patient's appointments for UI.
 - `process(user_id, extracted)` — orchestrates the above and returns
   a `BookingResponse`.
 
@@ -172,6 +174,75 @@ def book(user_id: int, slot_id: int) -> BookingConfirmation | None:
             )
     except Exception as exc:
         logger.warning("book() failed: %s", exc)
+        return None
+
+
+def list_appointments(user_id: int, *, include_cancelled: bool = False) -> list[dict]:
+    """Return the patient's appointments (newest book first), with slot + doctor info."""
+    conn = get_conn()
+    status_clause = "" if include_cancelled else "AND a.status = 'confirmed'"
+    rows = conn.execute(
+        f"""SELECT a.appointment_id, a.status, a.booked_at,
+                  s.slot_id, s.date, s.time, s.is_available,
+                  d.name AS doctor_name, f.name AS facility_name,
+                  d.channeling_fee
+           FROM Appointment a
+           JOIN AppointmentSlot s ON s.slot_id = a.slot_id
+           JOIN Doctor d ON d.doctor_id = s.doctor_id
+           JOIN Facility f ON f.facility_id = d.facility_id
+           WHERE a.user_id = ? {status_clause}
+           ORDER BY s.date DESC, s.time DESC, a.appointment_id DESC""",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def cancel(user_id: int, appointment_id: int) -> BookingConfirmation | None:
+    """Cancel own future confirmed appointment and reopen the slot. Returns None on deny."""
+    conn = get_conn()
+    today = dtdate.today().isoformat()
+    try:
+        with conn:  # transaction
+            row = conn.execute(
+                """SELECT a.appointment_id, a.user_id, a.status, a.slot_id,
+                          s.date, s.time, s.is_available,
+                          d.name AS doctor_name, d.channeling_fee,
+                          f.name AS facility_name
+                   FROM Appointment a
+                   JOIN AppointmentSlot s ON s.slot_id = a.slot_id
+                   JOIN Doctor d ON d.doctor_id = s.doctor_id
+                   JOIN Facility f ON f.facility_id = d.facility_id
+                   WHERE a.appointment_id = ?""",
+                (appointment_id,),
+            ).fetchone()
+            if not row:
+                return None
+            if row["user_id"] != user_id:
+                return None
+            if row["status"] != "confirmed":
+                return None
+            # Future-only: past-date appointments stay confirmed for the record.
+            if row["date"] < today:
+                return None
+            conn.execute(
+                "UPDATE Appointment SET status = 'cancelled' WHERE appointment_id = ?",
+                (appointment_id,),
+            )
+            conn.execute(
+                "UPDATE AppointmentSlot SET is_available = 1 WHERE slot_id = ?",
+                (row["slot_id"],),
+            )
+            return BookingConfirmation(
+                appointment_id=appointment_id,
+                slot_id=row["slot_id"],
+                doctor_name=row["doctor_name"],
+                facility_name=row["facility_name"],
+                date=row["date"],
+                time=row["time"],
+                channeling_fee=row["channeling_fee"] or 0.0,
+            )
+    except Exception as exc:
+        logger.warning("cancel() failed: %s", exc)
         return None
 
 
