@@ -193,10 +193,19 @@ def pydantic_ai_model():
             from pydantic_ai.providers.openai import OpenAIProvider  # type: ignore
 
             return OpenAIModel(model_name(), provider=OpenAIProvider(api_key=api_key()))
-        from pydantic_ai.models.gemini import GeminiModel  # type: ignore
-        from pydantic_ai.providers.google_gla import GoogleGLAProvider  # type: ignore
+        # Prefer GoogleModel (current pydantic-ai); fall back to deprecated GeminiModel
+        # when an older/newer install only ships one of the two entry points.
+        try:
+            from pydantic_ai.models.google import GoogleModel  # type: ignore
+            from pydantic_ai.providers.google import GoogleProvider  # type: ignore
 
-        return GeminiModel(model_name(), provider=GoogleGLAProvider(api_key=api_key()))
+            return GoogleModel(model_name(), provider=GoogleProvider(api_key=api_key()))
+        except Exception as google_exc:
+            logger.debug("GoogleModel unavailable (%s); trying GeminiModel", google_exc)
+            from pydantic_ai.models.gemini import GeminiModel  # type: ignore
+            from pydantic_ai.providers.google_gla import GoogleGLAProvider  # type: ignore
+
+            return GeminiModel(model_name(), provider=GoogleGLAProvider(api_key=api_key()))
     except Exception as exc:
         logger.warning("pydantic_ai_model unavailable (%s): %s", provider(), exc)
         return None
