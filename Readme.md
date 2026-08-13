@@ -335,6 +335,9 @@ Configure these in `project/.env`:
 | `NTFY_BASE` | `https://ntfy.sh` | No | ntfy.sh base URL (self-hosted option) |
 | `RAG_EMBED_BACKEND` | `local` | No | `local` (ONNX) or `gemini` for embeddings |
 | `DATABASE_URL` | — | No | If `postgresql://…`, use Postgres (needs `psycopg`); else SQLite. CI stays on SQLite. |
+| `SMS_PROVIDER` | `stub` | No | Emergency SMS: `stub` (offline) or `http` gateway |
+| `SMS_HTTP_URL` | — | If http | Gateway endpoint for emergency SMS |
+| `SMS_STUB_OK` | `1` | No | Set `0` to simulate stub SMS failure |
 
 ---
 
