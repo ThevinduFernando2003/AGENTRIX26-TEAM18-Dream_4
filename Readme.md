@@ -319,6 +319,8 @@ pytest tests/test_booking.py -v
 
 All tests run fully offline. The `seeded_db` fixture redirects the database to a temporary file. The `chroma_tmp` fixture builds a throwaway Chroma index using local ONNX embeddings.
 
+GitHub Actions runs the same suite on push/PR to `booking` / `main` (see `.github/workflows/ci.yml`).
+
 ---
 
 ## Environment Variables
