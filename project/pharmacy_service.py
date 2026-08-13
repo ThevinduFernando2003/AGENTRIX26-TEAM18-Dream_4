@@ -7,7 +7,7 @@ import io
 from typing import Union
 
 from . import authz
-from .db.db import get_conn
+from .db.repo import connection as get_conn
 
 CsvSource = Union[str, bytes]
 

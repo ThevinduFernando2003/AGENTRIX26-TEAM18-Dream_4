@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
-from .db.db import get_conn
+from .db.repo import connection as get_conn
 
 ROLES = frozenset({"patient", "pharmacy_staff", "hospital_staff", "admin"})
 STAFF_ROLES = frozenset({"pharmacy_staff", "hospital_staff", "admin"})

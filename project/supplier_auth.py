@@ -11,7 +11,7 @@ from typing import Optional
 import bcrypt
 
 from . import authz
-from .db.db import get_conn
+from .db.repo import connection as get_conn
 
 
 def _verify_pw(plain: str, hashed: str) -> bool:

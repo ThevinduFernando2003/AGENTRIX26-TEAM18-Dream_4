@@ -9,7 +9,7 @@ from datetime import date as dtdate, timedelta
 from typing import Optional
 
 from . import authz
-from .db.db import get_conn
+from .db.repo import connection as get_conn
 
 
 def todays_bookings(account: dict, *, day: Optional[str] = None) -> list[dict]:

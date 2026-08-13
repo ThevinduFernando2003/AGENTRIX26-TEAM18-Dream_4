@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from ..db.db import get_conn
+from ..db.repo import connection as get_conn
 from ..models import (
     MedicinePriceItem,
     MedicineQuoteResult,
