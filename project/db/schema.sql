@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS User (
     family_contact_phone TEXT,
     -- PDPA-style health-data processing consent (ISO timestamp); required for new signups.
     consent_accepted_at  TEXT,
+    -- Phase 1 RBAC: patient | pharmacy_staff | hospital_staff | admin
+    -- pharmacy_id / facility_id are org binds (no FK here — Pharmacy/Facility
+    -- are created later in this script; app + authz enforce validity).
+    role                 TEXT NOT NULL DEFAULT 'patient'
+                         CHECK(role IN ('patient','pharmacy_staff','hospital_staff','admin')),
+    pharmacy_id          INTEGER,
+    facility_id          INTEGER,
     created_at           TEXT DEFAULT (datetime('now'))
 );
 

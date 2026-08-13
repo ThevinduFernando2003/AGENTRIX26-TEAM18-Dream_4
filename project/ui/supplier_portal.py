@@ -204,7 +204,9 @@ def main() -> None:
             st.session_state.pop("supplier_account", None)
             st.rerun()
 
-    if account["role"] == "pharmacy":
+    from project import authz
+
+    if authz.is_pharmacy_staff(account) and account.get("pharmacy_id"):
         pharmacies = _pharmacies(account["pharmacy_id"])
         if not pharmacies:
             st.error("No pharmacy bound to this account.")
@@ -235,7 +237,7 @@ def main() -> None:
             else:
                 st.info("No changes to publish.")
 
-    elif account["role"] == "hospital":
+    elif authz.is_hospital_staff(account) and account.get("facility_id"):
         doctors = _doctors(account["facility_id"])
         if not doctors:
             st.error("No doctors at the facility bound to this account.")
@@ -269,7 +271,7 @@ def main() -> None:
                 else:
                     st.warning("Could not publish (denied or slot already exists).")
     else:
-        st.error("Unknown supplier role.")
+        st.error("Unknown or unbound supplier role.")
 
     st.markdown("---")
     st.caption(

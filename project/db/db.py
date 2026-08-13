@@ -124,6 +124,61 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
+    # Phase 1: RBAC columns on User.
+    user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(User)").fetchall()}
+    if "role" not in user_cols:
+        conn.execute("ALTER TABLE User ADD COLUMN role TEXT DEFAULT 'patient'")
+        conn.commit()
+    if "pharmacy_id" not in user_cols:
+        conn.execute("ALTER TABLE User ADD COLUMN pharmacy_id INTEGER")
+        conn.commit()
+    if "facility_id" not in user_cols:
+        conn.execute("ALTER TABLE User ADD COLUMN facility_id INTEGER")
+        conn.commit()
+    conn.execute("UPDATE User SET role = COALESCE(role, 'patient') WHERE role IS NULL OR role = ''")
+    conn.commit()
+
+    # Lift legacy SupplierAccount rows into User (pharmacy→pharmacy_staff, etc.).
+    has_supplier = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='SupplierAccount'"
+    ).fetchone()
+    if has_supplier:
+        for r in conn.execute(
+            """SELECT username, password_hash, role, pharmacy_id, facility_id
+               FROM SupplierAccount"""
+        ).fetchall():
+            exists = conn.execute(
+                "SELECT user_id FROM User WHERE username = ?", (r["username"],)
+            ).fetchone()
+            mapped = (
+                "pharmacy_staff"
+                if r["role"] == "pharmacy"
+                else "hospital_staff"
+                if r["role"] == "hospital"
+                else "patient"
+            )
+            if exists:
+                conn.execute(
+                    """UPDATE User SET role = ?, pharmacy_id = COALESCE(?, pharmacy_id),
+                           facility_id = COALESCE(?, facility_id)
+                       WHERE user_id = ?""",
+                    (mapped, r["pharmacy_id"], r["facility_id"], exists["user_id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO User(username, password_hash, role, pharmacy_id, facility_id,
+                                        consent_accepted_at)
+                       VALUES(?,?,?,?,?,datetime('now'))""",
+                    (
+                        r["username"],
+                        r["password_hash"],
+                        mapped,
+                        r["pharmacy_id"],
+                        r["facility_id"],
+                    ),
+                )
+        conn.commit()
+
 
 def init_db(seed: bool = True) -> None:
     """Create tables if missing and (optionally) load seed data."""
@@ -133,10 +188,10 @@ def init_db(seed: bool = True) -> None:
     conn.commit()
     _migrate(conn)
     if seed:
-        from .seed import ensure_supplier_accounts, load_seed_if_empty  # local import to avoid cycle
+        from .seed import ensure_staff_accounts, load_seed_if_empty  # local import to avoid cycle
         load_seed_if_empty()
-        # Supplier accounts can land on DBs that already had patient seed.
-        ensure_supplier_accounts()
+        # Staff accounts can land on DBs that already had patient seed.
+        ensure_staff_accounts()
 
 
 if __name__ == "__main__":

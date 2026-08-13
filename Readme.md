@@ -279,7 +279,7 @@ Seed user `demo1` has a near-due reminder so `--once` exercises the path after D
 streamlit run project/ui/supplier_portal.py --server.port 8502
 ```
 
-Login required (SEED accounts): **union** / **unionpass** (Union Chemists pharmacy), **nawaloka** / **nawalokapass** (Nawaloka Hospital). Edits are scoped to the bound org only.
+Login required (SEED staff on the unified `User` table): **union** / **unionpass** (`pharmacy_staff` · Union Chemists), **nawaloka** / **nawalokapass** (`hospital_staff` · Nawaloka). Edits are scoped to the bound org only; staff cannot log into the patient app.
 
 ---
 

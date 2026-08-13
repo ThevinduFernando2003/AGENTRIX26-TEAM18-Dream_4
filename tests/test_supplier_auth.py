@@ -1,4 +1,4 @@
-"""Supplier portal login + org scoping (Phase 0)."""
+"""Supplier portal login + org scoping (Phase 0/1 unified User RBAC)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ def test_supplier_login_and_wrong_password(seeded_db):
     assert supplier_auth.login("union", "wrong") is None
     acc = supplier_auth.login("union", "unionpass")
     assert acc is not None
-    assert acc["role"] == "pharmacy"
+    assert acc["role"] == "pharmacy_staff"
     assert acc["pharmacy_id"] is not None
 
 
@@ -36,20 +36,28 @@ def test_apply_price_updates_scoped(seeded_db):
     n = portal._apply_price_updates(union, rows, edited)
     assert n == 1
 
-    # Impersonate a foreign pharmacy_id in the payload — must not write.
     foreign = seeded_db.get_conn().execute(
         """SELECT id, price, in_stock FROM PharmacyMedicinePrice
            WHERE pharmacy_id != ? LIMIT 1""",
         (union["pharmacy_id"],),
     ).fetchone()
-    original = [{"id": foreign["id"], "price": float(foreign["price"]), "in_stock": bool(foreign["in_stock"])}]
-    spoofed = [{"id": foreign["id"], "price": float(foreign["price"]) + 99, "in_stock": bool(foreign["in_stock"])}]
+    original = [
+        {"id": foreign["id"], "price": float(foreign["price"]), "in_stock": bool(foreign["in_stock"])}
+    ]
+    spoofed = [
+        {
+            "id": foreign["id"],
+            "price": float(foreign["price"]) + 99,
+            "in_stock": bool(foreign["in_stock"]),
+        }
+    ]
     assert portal._apply_price_updates(union, original, spoofed) == 0
 
 
 def test_hospital_slot_scope(seeded_db):
     hospital = supplier_auth.login("nawaloka", "nawalokapass")
     assert hospital is not None
+    assert hospital["role"] == "hospital_staff"
     own = seeded_db.get_conn().execute(
         "SELECT doctor_id FROM Doctor WHERE facility_id = ? LIMIT 1",
         (hospital["facility_id"],),
