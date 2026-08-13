@@ -259,6 +259,20 @@ streamlit run project/ui/app.py
 
 The app will open at `http://localhost:8501`.
 
+### Reminder worker (optional)
+
+The sidebar **Check my reminders** button still works as a manual override. To fire due follow-up reminders automatically (ntfy push, once per row):
+
+```bash
+# One-shot (demo / CI)
+python -m project.workers.reminder_worker --once
+
+# Poll loop (default every 60s; override with REMINDER_POLL_SECONDS)
+python -m project.workers.reminder_worker
+```
+
+Seed user `demo1` has a near-due reminder so `--once` exercises the path after DB init.
+
 ---
 
 ## Building the RAG Index

@@ -77,9 +77,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         r["name"] for r in conn.execute("PRAGMA table_info(PharmacyMedicinePrice)").fetchall()
     }
     if "updated_at" not in pmp_cols:
-        conn.execute(
-            "ALTER TABLE PharmacyMedicinePrice ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))"
-        )
+        # SQLite disallows non-constant defaults on ADD COLUMN; backfill below.
+        conn.execute("ALTER TABLE PharmacyMedicinePrice ADD COLUMN updated_at TEXT")
         conn.commit()
     conn.execute(
         """UPDATE PharmacyMedicinePrice
