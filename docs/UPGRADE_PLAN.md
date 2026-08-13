@@ -1,7 +1,7 @@
 # MedBridge AI — Full Upgrade & Integration Plan
 
-**Status:** Living upgrade roadmap (derived from codebase + README tiers + `docs/architecture.md` + `docs/DEFENSE.md` + viva guides).  
-**Formal specs:** [`SRS.md`](SRS.md) · [`SAD.md`](SAD.md) — this file keeps the gap audit and phased delivery plan.
+**Status:** Living upgrade roadmap (gap audit + narrative).  
+**Authoritative specs & delivery:** [`SRS.md`](SRS.md) v1.2 · [`SAD.md`](SAD.md) v1.2 · [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · [`UAT_CHECKLIST.md`](UAT_CHECKLIST.md) · [`SAFETY_CHECKLIST.md`](SAFETY_CHECKLIST.md)
 
 **Current baseline:** Validated multi-agent **patient prototype** (Streamlit) + **concept supplier portal** (:8502) + SEED marketplace data + 52 offline tests + OpenAI/Gemini provider switch.
 

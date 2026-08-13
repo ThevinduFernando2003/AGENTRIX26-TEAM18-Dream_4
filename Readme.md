@@ -21,6 +21,18 @@ MedBridge AI is a Streamlit-based conversational assistant that helps patients t
 - [Demo Walkthrough](#demo-walkthrough)
 - [Team & Ownership](#team--ownership)
 - [Technical Constraints](#technical-constraints)
+- [Specs & upgrade plan](#specs--upgrade-plan)
+
+## Specs & upgrade plan
+
+| Document | Purpose |
+|---|---|
+| [`docs/SRS.md`](docs/SRS.md) | Software Requirements Specification (FR/NFR, phases) |
+| [`docs/SAD.md`](docs/SAD.md) | Software Architecture Document (as-built + target) |
+| [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | Phase 0–3 delivery plan + Initial 10 tasks |
+| [`docs/UPGRADE_PLAN.md`](docs/UPGRADE_PLAN.md) | Gap audit & stakeholder roadmap |
+| [`docs/UAT_CHECKLIST.md`](docs/UAT_CHECKLIST.md) | Stakeholder UAT sign-off |
+| [`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md) | Non-negotiable structural safety gates |
 
 ---
 
