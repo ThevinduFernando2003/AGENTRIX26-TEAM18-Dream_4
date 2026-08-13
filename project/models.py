@@ -89,6 +89,9 @@ class PharmacyQuote(BaseModel):
     total_cost: float
     distance_km: Optional[float] = None
     missing: list[str] = Field(default_factory=list)
+    # Oldest updated_at among quoted in-stock lines (honest freshness).
+    updated_at: Optional[str] = None
+    freshness_label: Optional[str] = None
 
 
 class MedicineQuoteResult(BaseModel):

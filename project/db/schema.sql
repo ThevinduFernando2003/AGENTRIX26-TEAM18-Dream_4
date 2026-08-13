@@ -144,6 +144,8 @@ CREATE TABLE IF NOT EXISTS PharmacyMedicinePrice (
     medicine_id INTEGER NOT NULL REFERENCES Medicine(medicine_id),
     price       REAL NOT NULL,
     in_stock    INTEGER NOT NULL DEFAULT 1,
+    -- Phase 0: bumped on every supplier edit; seed rows get created_at-style stamp.
+    updated_at  TEXT DEFAULT (datetime('now')),
     UNIQUE(pharmacy_id, medicine_id)
 );
 

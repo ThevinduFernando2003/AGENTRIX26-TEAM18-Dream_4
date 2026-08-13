@@ -158,7 +158,8 @@ def _seed_pharmacies() -> None:
             if exists:
                 continue
             conn.execute(
-                "INSERT INTO PharmacyMedicinePrice(pharmacy_id, medicine_id, price, in_stock) VALUES(?,?,?,?)",
+                """INSERT INTO PharmacyMedicinePrice(pharmacy_id, medicine_id, price, in_stock, updated_at)
+                   VALUES(?,?,?,?,datetime('now'))""",
                 (pharmacy_id, med["medicine_id"], info["price"], 1 if info.get("in_stock", True) else 0),
             )
     conn.commit()

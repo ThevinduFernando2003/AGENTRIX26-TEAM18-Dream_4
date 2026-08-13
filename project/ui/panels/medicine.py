@@ -56,6 +56,7 @@ def render(user: dict) -> None:
     if pm["quotes"]:
         col_pharmacy = t("panel.medicine.col_pharmacy", lang)
         col_basket = t("panel.medicine.col_basket", lang)
+        col_fresh = t("panel.medicine.col_freshness", lang)
         col_address = t("panel.medicine.col_address", lang)
         col_items = t("panel.medicine.col_items", lang)
         col_total = t("panel.medicine.col_total", lang)
@@ -69,6 +70,7 @@ def render(user: dict) -> None:
             row = {
                 col_pharmacy: q["pharmacy_name"],
                 col_basket: "✅" if not missing else f"⚠️ {len(missing)}",
+                col_fresh: q.get("freshness_label") or "SEED",
                 col_total: f"LKR {q['total_cost']:,.0f}",
             }
             if has_distance:

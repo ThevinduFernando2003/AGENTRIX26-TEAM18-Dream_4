@@ -244,6 +244,7 @@ CATALOG: dict[str, dict[str, str]] = {
                              "ta": "(demo) பட்டியலில் இல்லை: {names}"},
     "panel.medicine.col_pharmacy":{"en": "Pharmacy", "si": "ෆාමසිය", "ta": "மருந்தகம்"},
     "panel.medicine.col_basket":{"en": "Has all?", "si": "සියල්ල තිබේද?", "ta": "அனைத்தும் உள்ளதா?"},
+    "panel.medicine.col_freshness":{"en": "Freshness", "si": "නැවුම්භාවය", "ta": "புதுப்பிப்பு"},
     "panel.medicine.col_address":{"en": "Address", "si": "ලිපිනය", "ta": "முகவரி"},
     "panel.medicine.col_items":{"en": "Items", "si": "අයිතම", "ta": "பொருட்கள்"},
     "panel.medicine.col_total":{"en": "Total (LKR)", "si": "එකතුව (LKR)", "ta": "மொத்தம் (LKR)"},

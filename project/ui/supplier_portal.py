@@ -81,7 +81,9 @@ def _apply_price_updates(original: list[dict], edited: list[dict]) -> int:
             new_stock = 1 if row["in_stock"] else 0
             if new_price != prev["price"] or new_stock != prev["in_stock"]:
                 conn.execute(
-                    "UPDATE PharmacyMedicinePrice SET price = ?, in_stock = ? WHERE id = ?",
+                    """UPDATE PharmacyMedicinePrice
+                       SET price = ?, in_stock = ?, updated_at = datetime('now')
+                       WHERE id = ?""",
                     (new_price, new_stock, row["id"]),
                 )
                 changed += 1

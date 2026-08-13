@@ -72,6 +72,22 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
+    # Phase 0: pharmacy price freshness.
+    pmp_cols = {
+        r["name"] for r in conn.execute("PRAGMA table_info(PharmacyMedicinePrice)").fetchall()
+    }
+    if "updated_at" not in pmp_cols:
+        conn.execute(
+            "ALTER TABLE PharmacyMedicinePrice ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))"
+        )
+        conn.commit()
+    conn.execute(
+        """UPDATE PharmacyMedicinePrice
+           SET updated_at = COALESCE(updated_at, datetime('now'))
+           WHERE updated_at IS NULL"""
+    )
+    conn.commit()
+
 
 def init_db(seed: bool = True) -> None:
     """Create tables if missing and (optionally) load seed data."""
