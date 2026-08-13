@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 
 load_dotenv(_ROOT / "project" / ".env")
 
-from project import authz, hospital_service, supplier_auth  # noqa: E402
+from project import authz, hospital_service, pharmacy_service, supplier_auth  # noqa: E402
 from project.db.db import get_conn, init_db  # noqa: E402
 
 st.set_page_config(page_title="MedBridge Supplier Portal", page_icon="🏪", layout="wide")
@@ -211,29 +211,44 @@ def main() -> None:
             return
         chosen = pharmacies[0]["pharmacy_id"]
         st.subheader(f"💊 {pharmacies[0]['name']}")
-        rows = _price_rows(chosen)
-        st.caption(
-            "Edit a price or tick/untick stock, then publish. Scoped to your pharmacy only."
-        )
-        edited = st.data_editor(
-            rows,
-            key=f"price_editor_{chosen}",
-            use_container_width=True,
-            hide_index=True,
-            disabled=("id", "medicine"),
-            column_order=("medicine", "price", "in_stock"),
-            column_config={
-                "medicine": st.column_config.TextColumn("Medicine"),
-                "price": st.column_config.NumberColumn("Price (LKR)", min_value=0, step=1),
-                "in_stock": st.column_config.CheckboxColumn("In stock"),
-            },
-        )
-        if st.button("📣 Publish changes", type="primary", key="publish_prices"):
-            n = _apply_price_updates(account, rows, edited)
-            if n:
-                st.success(f"{n} change(s) published — patients see this immediately.")
-            else:
-                st.info("No changes to publish.")
+        tab_edit, tab_csv = st.tabs(["Edit prices", "CSV import"])
+        with tab_edit:
+            rows = _price_rows(chosen)
+            st.caption(
+                "Edit a price or tick/untick stock, then publish. Scoped to your pharmacy only."
+            )
+            edited = st.data_editor(
+                rows,
+                key=f"price_editor_{chosen}",
+                use_container_width=True,
+                hide_index=True,
+                disabled=("id", "medicine"),
+                column_order=("medicine", "price", "in_stock"),
+                column_config={
+                    "medicine": st.column_config.TextColumn("Medicine"),
+                    "price": st.column_config.NumberColumn("Price (LKR)", min_value=0, step=1),
+                    "in_stock": st.column_config.CheckboxColumn("In stock"),
+                },
+            )
+            if st.button("📣 Publish changes", type="primary", key="publish_prices"):
+                n = _apply_price_updates(account, rows, edited)
+                if n:
+                    st.success(f"{n} change(s) published — patients see this immediately.")
+                else:
+                    st.info("No changes to publish.")
+        with tab_csv:
+            st.caption("Columns: medicine, price, in_stock (true/false). Catalog names only.")
+            uploaded = st.file_uploader("CSV file", type=["csv"], key="pharm_csv")
+            if uploaded is not None and st.button("Import CSV", type="primary", key="import_csv"):
+                n, errs = pharmacy_service.import_prices_csv(account, uploaded.getvalue())
+                if n:
+                    st.success(f"Imported/updated {n} row(s). Freshness timestamps bumped.")
+                if errs:
+                    st.warning("\n".join(errs[:20]))
+                if not n and not errs:
+                    st.info("Nothing imported.")
+                if n:
+                    st.rerun()
 
     elif authz.is_hospital_staff(account) and account.get("facility_id"):
         doctors = _doctors(account["facility_id"])
