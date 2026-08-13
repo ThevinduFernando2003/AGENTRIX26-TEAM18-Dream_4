@@ -27,8 +27,8 @@ from dotenv import load_dotenv
 
 load_dotenv(_ROOT / "project" / ".env")
 
+from project import authz, hospital_service, supplier_auth  # noqa: E402
 from project.db.db import get_conn, init_db  # noqa: E402
-from project import supplier_auth  # noqa: E402
 
 st.set_page_config(page_title="MedBridge Supplier Portal", page_icon="🏪", layout="wide")
 
@@ -204,8 +204,6 @@ def main() -> None:
             st.session_state.pop("supplier_account", None)
             st.rerun()
 
-    from project import authz
-
     if authz.is_pharmacy_staff(account) and account.get("pharmacy_id"):
         pharmacies = _pharmacies(account["pharmacy_id"])
         if not pharmacies:
@@ -246,30 +244,103 @@ def main() -> None:
         dlabels = {
             d["doctor_id"]: f"{d['name']} — {d['specialty']} @ {d['facility']}" for d in doctors
         }
-        doc = st.selectbox(
-            "Doctor",
-            options=list(dlabels),
-            format_func=lambda did: dlabels[did],
-            key="supplier_doctor",
+        tab_today, tab_slots, tab_tpl = st.tabs(
+            ["Today's bookings", "Publish slots", "Slot templates"]
         )
-        col_list, col_form = st.columns([3, 2])
-        with col_list:
-            st.markdown("**Upcoming slots**")
-            slots = _upcoming_slots(doc)
-            if slots:
-                st.dataframe(slots, use_container_width=True, hide_index=True)
+
+        with tab_today:
+            day = st.date_input("Day", value=dtdate.today(), key="hosp_day")
+            bookings = hospital_service.todays_bookings(account, day=day.isoformat())
+            if not bookings:
+                st.info("No confirmed bookings for this day.")
             else:
-                st.info("No upcoming slots published for this doctor yet.")
-        with col_form:
-            st.markdown("**Publish a new slot**")
-            day = st.date_input("Date", min_value=dtdate.today(), key="slot_date")
-            time_hm = st.selectbox("Time", _SLOT_TIMES, index=4, key="slot_time")
-            if st.button("📣 Publish slot", type="primary", key="publish_slot"):
-                if _publish_slot(account, doc, day.isoformat(), time_hm):
-                    st.success("Slot published — patients can book it immediately.")
+                for b in bookings:
+                    cols = st.columns([4, 1])
+                    with cols[0]:
+                        st.markdown(
+                            f"**#{b['appointment_id']}** · {b['time']} · {b['doctor_name']} · "
+                            f"{b['patient_name'] or b['patient_username']} · `{b['status']}`"
+                        )
+                    with cols[1]:
+                        if b["status"] == "confirmed" and st.button(
+                            "No-show",
+                            key=f"noshow_{b['appointment_id']}",
+                        ):
+                            if hospital_service.mark_no_show(account, b["appointment_id"]):
+                                st.success("Marked no-show.")
+                                st.rerun()
+                            else:
+                                st.warning("Could not mark no-show.")
+
+        with tab_slots:
+            doc = st.selectbox(
+                "Doctor",
+                options=list(dlabels),
+                format_func=lambda did: dlabels[did],
+                key="supplier_doctor",
+            )
+            col_list, col_form = st.columns([3, 2])
+            with col_list:
+                st.markdown("**Upcoming slots**")
+                slots = _upcoming_slots(doc)
+                if slots:
+                    st.dataframe(slots, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No upcoming slots published for this doctor yet.")
+            with col_form:
+                st.markdown("**Publish a new slot**")
+                day = st.date_input("Date", min_value=dtdate.today(), key="slot_date")
+                time_hm = st.selectbox("Time", _SLOT_TIMES, index=4, key="slot_time")
+                if st.button("📣 Publish slot", type="primary", key="publish_slot"):
+                    if _publish_slot(account, doc, day.isoformat(), time_hm):
+                        st.success("Slot published — patients can book it immediately.")
+                        st.rerun()
+                    else:
+                        st.warning("Could not publish (denied or slot already exists).")
+
+        with tab_tpl:
+            doc_t = st.selectbox(
+                "Doctor for template",
+                options=list(dlabels),
+                format_func=lambda did: dlabels[did],
+                key="supplier_doctor_tpl",
+            )
+            wd_labels = {
+                0: "Mon",
+                1: "Tue",
+                2: "Wed",
+                3: "Thu",
+                4: "Fri",
+                5: "Sat",
+                6: "Sun",
+            }
+            chosen_wd = st.multiselect(
+                "Weekdays",
+                options=list(wd_labels),
+                default=[0, 2, 4],
+                format_func=lambda i: wd_labels[i],
+                key="tpl_weekdays",
+            )
+            chosen_times = st.multiselect(
+                "Times",
+                options=_SLOT_TIMES,
+                default=["09:00", "10:00", "11:00"],
+                key="tpl_times",
+            )
+            ahead = st.slider("Days ahead", min_value=7, max_value=60, value=14, key="tpl_ahead")
+            if st.button("📣 Publish template", type="primary", key="publish_tpl"):
+                n = hospital_service.publish_slot_template(
+                    account,
+                    doc_t,
+                    weekdays=chosen_wd,
+                    times=chosen_times,
+                    days_ahead=ahead,
+                )
+                if n:
+                    st.success(f"Published {n} new slot(s).")
                     st.rerun()
                 else:
-                    st.warning("Could not publish (denied or slot already exists).")
+                    st.info("No new slots (denied, empty selection, or all already exist).")
     else:
         st.error("Unknown or unbound supplier role.")
 
